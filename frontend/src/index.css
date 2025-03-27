@@ -1,0 +1,17 @@
+@import './styles/common.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Основни стилове */
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background-color: #f3f4f6;
+}
