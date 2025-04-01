@@ -1,7 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import AuthService from '../services/authService';
+import { useAuth } from '../context/AuthContext';
 
 const RegisterPage = () => {
+  const navigate = useNavigate();
+  const { login } = useAuth();
   const [accountType, setAccountType] = useState('person');
   const [formData, setFormData] = useState({
     email: '',
@@ -12,6 +16,8 @@ const RegisterPage = () => {
     companyName: '',
     vatNumber: ''
   });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -25,31 +31,64 @@ const RegisterPage = () => {
     setAccountType(type);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    
     if (formData.password !== formData.confirmPassword) {
-      alert('Паролите не съвпадат!');
+      setError('Паролите не съвпадат!');
       return;
     }
-
-    // Филтрираме данните според типа акаунт
-    const submissionData = {
-      accountType,
-      email: formData.email,
-      password: formData.password,
-      ...(accountType === 'person' 
-        ? { 
-            firstName: formData.firstName,
-            lastName: formData.lastName
-          }
-        : {
-            companyName: formData.companyName,
-            vatNumber: formData.vatNumber
-          }
-      )
-    };
-
-    console.log('Register data:', submissionData);
+    
+    // Валидация на полета според типа акаунт
+    if (accountType === 'person') {
+      if (!formData.firstName || !formData.lastName) {
+        setError('Моля, попълнете името и фамилията си.');
+        return;
+      }
+    } else {
+      if (!formData.companyName || !formData.vatNumber) {
+        setError('Моля, попълнете името на компанията и ЕИК/Булстат.');
+        return;
+      }
+    }
+    
+    setLoading(true);
+    
+    try {
+      // Регистрация
+      const registerResponse = await AuthService.register({
+        ...formData,
+        accountType
+      });
+      
+      console.log('Успешна регистрация:', registerResponse);
+      
+      // Автоматичен вход след регистрация
+      try {
+        // Подготвяме данните за вход
+        const loginData = {
+          email: formData.email,
+          password: formData.password
+        };
+        
+        // Извикваме функцията за вход
+        await login(loginData);
+        
+        // Пренасочваме към началната страница
+        navigate('/');
+      } catch (loginErr) {
+        console.error('Грешка при автоматичен вход:', loginErr);
+        // Въпреки грешката при автоматичния вход, регистрацията е успешна
+        // Затова пренасочваме към страницата за вход
+        navigate('/login');
+      }
+    } catch (err) {
+      setError(err.error || 'Грешка при регистрация. Моля, опитайте отново.');
+      console.error('Грешка при регистрация:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -93,6 +132,12 @@ const RegisterPage = () => {
               Бизнес
             </button>
           </div>
+
+          {error && (
+            <div className="bg-red-900 text-white p-3 rounded-md text-sm">
+              {error}
+            </div>
+          )}
 
           <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
             <div className="rounded-md shadow-sm space-y-4">
@@ -202,9 +247,12 @@ const RegisterPage = () => {
             <div>
               <button
                 type="submit"
-                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                disabled={loading}
+                className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white ${
+                  loading ? 'bg-gray-500' : 'bg-gray-700 hover:bg-gray-600'
+                } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500`}
               >
-                Регистрация
+                {loading ? 'Обработка...' : 'Регистрация'}
               </button>
             </div>
           </form>

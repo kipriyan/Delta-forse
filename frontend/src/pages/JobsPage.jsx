@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import JobApplyModal from '../components/JobApplyModal';
+import axios from 'axios';
 
 const JobsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [selectedJob, setSelectedJob] = useState(null);
   const [savedJobs, setSavedJobs] = useState(new Set());
+  const [jobs, setJobs] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const industries = [
     "IT и Технологии",
@@ -74,6 +77,27 @@ const JobsPage = () => {
     "Друго"
   ];
 
+  useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        const response = await axios.get('/api/jobs');
+        console.log('Получени обяви:', response.data);
+        
+        if (response.data && response.data.success) {
+          setJobs(response.data.data || []);
+        } else {
+          console.error('Неуспешно извличане на обяви');
+        }
+      } catch (err) {
+        console.error('Грешка при извличане на обяви:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchJobs();
+  }, []);
+
   const handleSaveJob = (jobId, e) => {
     e.stopPropagation();
     setSavedJobs(prev => {
@@ -87,19 +111,6 @@ const JobsPage = () => {
     });
   };
 
-  const jobs = [
-    {
-      id: 1,
-      position: "Senior Frontend Developer",
-      company: "TechCorp Ltd.",
-      type: "Пълен работен ден",
-      location: "София",
-      salary: "4000-6000 лв.",
-      skills: "React, TypeScript",
-      description: "Търсим опитен Frontend разработчик за нашия екип..."
-    },
-  ];
-
   useEffect(() => {
     const query = searchParams.get('search');
     if (query) {
@@ -110,6 +121,12 @@ const JobsPage = () => {
   const handleSearch = (e) => {
     e.preventDefault();
     setSearchParams({ search: searchQuery });
+  };
+
+  const handleApplyClick = (job, e) => {
+    e.stopPropagation();
+    console.log('Отваряне на модал за обява:', job);
+    setSelectedJob(job);
   };
 
   return (
@@ -196,53 +213,77 @@ const JobsPage = () => {
             </div>
 
             <div className="w-full md:w-3/4 space-y-4">
-              {jobs.map(job => (
-                <div key={job.id} className="bg-gray-800 p-6 rounded-lg shadow-md hover:shadow-lg transition-all duration-300">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-xl font-semibold text-gray-200">{job.position}</h3>
-                      <p className="text-gray-400 mt-1">{job.company}</p>
-                    </div>
-                    <div className="flex items-start space-x-4">
-                      <button
-                        onClick={(e) => handleSaveJob(job.id, e)}
-                        className="text-gray-400 hover:text-yellow-300 transition-colors duration-300"
-                      >
-                        <svg 
-                          className="w-6 h-6" 
-                          fill={savedJobs.has(job.id) ? "currentColor" : "none"} 
-                          stroke="currentColor" 
-                          viewBox="0 0 24 24"
+              {!loading && jobs.length > 0 ? (
+                jobs.map(job => (
+                  <div key={job.id} className="bg-gray-800 p-6 rounded-lg shadow-md hover:shadow-lg transition-all duration-300">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="text-xl font-semibold text-gray-200">{job.title}</h3>
+                        <p className="text-gray-400 mt-1">{job.company_name || "Компания"}</p>
+                      </div>
+                      <div className="flex items-start space-x-4">
+                        <button
+                          onClick={(e) => handleSaveJob(job.id, e)}
+                          className="text-gray-400 hover:text-yellow-300 transition-colors duration-300"
                         >
-                          <path 
-                            strokeLinecap="round" 
-                            strokeLinejoin="round" 
-                            strokeWidth={savedJobs.has(job.id) ? "0" : "2"} 
-                            d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
-                          />
-                        </svg>
-                      </button>
-                      <span className="bg-gray-700 text-gray-300 text-sm font-medium px-2.5 py-0.5 rounded">
-                        {job.type}
+                          <svg 
+                            className="w-6 h-6" 
+                            fill={savedJobs.has(job.id) ? "currentColor" : "none"} 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
+                          >
+                            <path 
+                              strokeLinecap="round" 
+                              strokeLinejoin="round" 
+                              strokeWidth={savedJobs.has(job.id) ? "0" : "2"} 
+                              d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
+                            />
+                          </svg>
+                        </button>
+                        <span className="bg-gray-700 text-gray-300 text-sm font-medium px-2.5 py-0.5 rounded">
+                          {job.job_type || "Неопределен"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex items-center text-sm text-gray-400 space-x-4">
+                      <span>{job.location || "Местоположение"}</span>
+                      <span>{job.salary || "Заплата по договаряне"}</span>
+                      <span>
+                        {job.skills && Array.isArray(job.skills) 
+                          ? job.skills.map(s => s.name).join(', ') 
+                          : "Умения не са посочени"}
                       </span>
                     </div>
+                    <p className="mt-4 text-gray-300">
+                      {job.description ? (job.description.length > 200 ? 
+                        job.description.substring(0, 200) + '...' : 
+                        job.description) : 
+                        "Няма описание"}
+                    </p>
+                    <button 
+                      onClick={(e) => handleApplyClick(job, e)}
+                      className="mt-4 text-gray-300 hover:text-gray-100 font-medium transition-colors duration-300"
+                    >
+                      Кандидатствай →
+                    </button>
                   </div>
-                  <div className="mt-4 flex items-center text-sm text-gray-400 space-x-4">
-                    <span>{job.location}</span>
-                    <span>{job.salary}</span>
-                    <span>{job.skills}</span>
+                ))
+              ) : (
+                <div className="bg-gray-800 p-6 rounded-lg shadow-md hover:shadow-lg transition-all duration-300">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-200">
+                        {loading ? "Зареждане на обяви..." : "Няма намерени обяви"}
+                      </h3>
+                      <p className="text-gray-400 mt-4">
+                        {loading 
+                          ? "Моля, изчакайте..." 
+                          : "В момента няма активни обяви за работа. Опитайте отново по-късно."}
+                      </p>
+                    </div>
                   </div>
-                  <p className="mt-4 text-gray-300">
-                    {job.description}
-                  </p>
-                  <button 
-                    onClick={() => setSelectedJob(job)}
-                    className="mt-4 text-gray-300 hover:text-gray-100 font-medium transition-colors duration-300"
-                  >
-                    Кандидатствай →
-                  </button>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
@@ -251,7 +292,6 @@ const JobsPage = () => {
       {selectedJob && (
         <JobApplyModal
           job={selectedJob}
-          isOpen={!!selectedJob}
           onClose={() => setSelectedJob(null)}
         />
       )}

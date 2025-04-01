@@ -1,13 +1,19 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import AuthService from '../services/authService';
+import { useAuth } from '../context/AuthContext';
 
 const LoginPage = () => {
+  const navigate = useNavigate();
   const [accountType, setAccountType] = useState('person');
   const [formData, setFormData] = useState({
     email: '',
     password: '',
     ...(accountType === 'business' ? { vatNumber: '' } : {})
   });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -17,9 +23,21 @@ const LoginPage = () => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Login data:', { ...formData, accountType });
+    setError('');
+    setLoading(true);
+    
+    try {
+      const response = await login(formData);
+      console.log("Login successful:", response);
+      navigate('/');
+    } catch (err) {
+      console.error('Грешка при вход:', err);
+      setError(err.error || 'Неуспешен вход. Моля, проверете вашите данни.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -62,6 +80,12 @@ const LoginPage = () => {
               Бизнес
             </button>
           </div>
+
+          {error && (
+            <div className="bg-red-900 text-white p-3 rounded-md text-sm">
+              {error}
+            </div>
+          )}
 
           <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
             <div className="rounded-md shadow-sm space-y-4">
@@ -126,18 +150,21 @@ const LoginPage = () => {
               </div>
 
               <div className="text-sm">
-                <a href="#" className="font-medium text-gray-300 hover:text-white">
+                <Link to="/forgot-password" className="font-medium text-gray-300 hover:text-white">
                   Забравена парола?
-                </a>
+                </Link>
               </div>
             </div>
 
             <div>
               <button
                 type="submit"
-                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200"
+                disabled={loading}
+                className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white ${
+                  loading ? 'bg-gray-500' : 'bg-gray-700 hover:bg-gray-600'
+                } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200`}
               >
-                Вход
+                {loading ? 'Обработка...' : 'Вход'}
               </button>
             </div>
           </form>

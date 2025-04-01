@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
 import Layout from './components/layout/Layout';
 import HomePage from './pages/HomePage';
 import JobsPage from './pages/JobsPage';
@@ -12,6 +13,7 @@ import EquipmentPage from './pages/EquipmentPage';
 
 function App() {
   return (
+    <AuthProvider>
     <Router>
       <Layout>
         <Routes>
@@ -26,6 +28,7 @@ function App() {
         </Routes>
       </Layout>
     </Router>
+    </AuthProvider>
   );
 }
 

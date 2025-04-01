@@ -1,8 +1,26 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 const Navbar = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { user, isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
+
+  // Добавяме дебъг информация
+  useEffect(() => {
+    console.log("Navbar Auth State:", { isAuthenticated, user });
+    console.log("LocalStorage:", {
+      token: localStorage.getItem('token'),
+      user: localStorage.getItem('user')
+    });
+  }, [isAuthenticated, user]);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+    setIsMobileMenuOpen(false);
+  };
 
   const navLinks = [
     { to: "/jobs", text: "ОБЯВИ" },
@@ -41,18 +59,37 @@ const Navbar = () => {
             >
               ПУБЛИКУВАЙ ОБЯВА
             </Link>
-            <Link 
-              to="/login" 
-              className="text-gray-300 hover:text-white px-3 py-2 text-sm font-medium transition-all duration-300 hover:scale-105"
-            >
-              ВХОД
-            </Link>
-            <Link 
-              to="/register" 
-              className="bg-gray-700 text-white px-6 py-2 rounded-md text-sm font-medium hover:bg-gray-600 transform hover:scale-105 transition-all duration-300 shadow-md hover:shadow-lg"
-            >
-              РЕГИСТРАЦИЯ
-            </Link>
+            
+            {isAuthenticated ? (
+              // Показваме информация за потребителя и бутон за изход
+              <div className="flex items-center space-x-4">
+                <span className="text-gray-300 text-sm">
+                  Здравей, {user?.first_name || user?.username || user?.email.split('@')[0]}
+                </span>
+                <button
+                  onClick={handleLogout}
+                  className="bg-gray-700 text-white px-6 py-2 rounded-md text-sm font-medium hover:bg-gray-600 transform hover:scale-105 transition-all duration-300 shadow-md hover:shadow-lg"
+                >
+                  ИЗХОД
+                </button>
+              </div>
+            ) : (
+              // Показваме бутоните за вход и регистрация
+              <>
+                <Link 
+                  to="/login" 
+                  className="text-gray-300 hover:text-white px-3 py-2 text-sm font-medium transition-all duration-300 hover:scale-105"
+                >
+                  ВХОД
+                </Link>
+                <Link 
+                  to="/register" 
+                  className="bg-gray-700 text-white px-6 py-2 rounded-md text-sm font-medium hover:bg-gray-600 transform hover:scale-105 transition-all duration-300 shadow-md hover:shadow-lg"
+                >
+                  РЕГИСТРАЦИЯ
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Мобилен бутон за меню */}
@@ -90,18 +127,32 @@ const Navbar = () => {
                   {link.text}
                 </Link>
               ))}
-              <Link
-                to="/login"
-                className="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700 transition-colors duration-300"
-              >
-                ВХОД
-              </Link>
-              <Link
-                to="/register"
-                className="block px-3 py-2 rounded-md text-base font-medium bg-gray-700 text-white hover:bg-gray-600 transition-colors duration-300"
-              >
-                РЕГИСТРАЦИЯ
-              </Link>
+              
+              {isAuthenticated ? (
+                // Показваме бутон за изход
+                <button
+                  onClick={handleLogout}
+                  className="w-full text-left block px-3 py-2 rounded-md text-base font-medium bg-gray-700 text-white hover:bg-gray-600 transition-colors duration-300"
+                >
+                  ИЗХОД ({user?.first_name || user?.username || user?.email.split('@')[0]})
+                </button>
+              ) : (
+                // Показваме бутоните за вход и регистрация
+                <>
+                  <Link
+                    to="/login"
+                    className="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700 transition-colors duration-300"
+                  >
+                    ВХОД
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="block px-3 py-2 rounded-md text-base font-medium bg-gray-700 text-white hover:bg-gray-600 transition-colors duration-300"
+                  >
+                    РЕГИСТРАЦИЯ
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         )}

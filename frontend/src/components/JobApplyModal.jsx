@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const JobApplyModal = ({ job, isOpen, onClose, initialData, isEditing }) => {
+const JobApplyModal = ({ job, isOpen = true, onClose, initialData, isEditing }) => {
   const [formData, setFormData] = useState(initialData || {
     name: '',
     email: '',
@@ -9,7 +9,19 @@ const JobApplyModal = ({ job, isOpen, onClose, initialData, isEditing }) => {
     cv: null
   });
 
-  if (!isOpen) return null;
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    console.log('Изпращане на данни за кандидатура:', formData, 'за позиция:', job.title);
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
@@ -17,8 +29,8 @@ const JobApplyModal = ({ job, isOpen, onClose, initialData, isEditing }) => {
         <div className="p-6">
           <div className="flex justify-between items-start mb-6">
             <div>
-              <h2 className="text-2xl font-bold text-white mb-2">{job.position}</h2>
-              <p className="text-gray-400">{job.company}</p>
+              <h2 className="text-2xl font-bold text-white mb-2">{job.title || job.position}</h2>
+              <p className="text-gray-400">{job.company_name || job.company}</p>
             </div>
             <button
               onClick={onClose}
@@ -30,13 +42,16 @@ const JobApplyModal = ({ job, isOpen, onClose, initialData, isEditing }) => {
             </button>
           </div>
 
-          <form className="space-y-6">
+          <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Име и фамилия
               </label>
               <input
                 type="text"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
                 required
                 className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-gray-600 focus:border-transparent"
               />
@@ -48,6 +63,9 @@ const JobApplyModal = ({ job, isOpen, onClose, initialData, isEditing }) => {
               </label>
               <input
                 type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
                 required
                 className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-gray-600 focus:border-transparent"
               />
@@ -59,6 +77,9 @@ const JobApplyModal = ({ job, isOpen, onClose, initialData, isEditing }) => {
               </label>
               <input
                 type="tel"
+                name="phone"
+                value={formData.phone}
+                onChange={handleChange}
                 className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-gray-600 focus:border-transparent"
               />
             </div>
@@ -69,6 +90,9 @@ const JobApplyModal = ({ job, isOpen, onClose, initialData, isEditing }) => {
               </label>
               <textarea
                 rows="4"
+                name="coverLetter"
+                value={formData.coverLetter}
+                onChange={handleChange}
                 className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-gray-600 focus:border-transparent"
               ></textarea>
             </div>
