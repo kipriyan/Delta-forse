@@ -1,21 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import { API_URL } from '../config/config';
+import { useAuth } from '../context/AuthContext';
 
 const PublishJobPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { token, user } = useAuth();
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
   const isEditing = location.state?.isEditing || false;
-  const initialData = location.state?.jobData || {
+  const initialData = {
     title: '',
     company: '',
     location: '',
-    type: 'full-time',
+    workType: '',
+    employmentType: 'full-time',
     salary: '',
+    hourlyRate: '',
+    experience: '',
+    industry: '',
     description: '',
     requirements: '',
-    benefits: '',
-    category: '',
-    industry: ''
+    category: ''
   };
 
   const [accountType, setAccountType] = useState('person');
@@ -29,16 +38,85 @@ const PublishJobPage = () => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isEditing) {
-      // Логика за редактиране на съществуваща обява
-      console.log('Updating job:', jobData);
-    } else {
-      // Логика за създаване на нова обява
-      console.log('Creating new job:', jobData);
+    setError('');
+    setLoading(true);
+
+    try {
+      // Функция за нормализиране на job_type
+      const normalizeJobType = (type) => {
+        const validTypes = ['full-time', 'part-time', 'contract', 'internship', 'remote'];
+        return validTypes.includes(type) ? type : 'full-time';
+      };
+
+      const formattedData = {
+        title: jobData.title,
+        description: jobData.description,
+        location: jobData.location,
+        // Нормализираме job_type преди изпращане
+        job_type: normalizeJobType(accountType === 'business' ? jobData.employmentType : jobData.workType),
+        salary: accountType === 'business' ? jobData.salary : jobData.hourlyRate,
+        requirements: accountType === 'business' ? jobData.requirements : jobData.experience
+      };
+
+      // Добавяме лог за дебъгване
+      console.log('Job type before sending:', formattedData.job_type);
+
+      // Валидации...
+      if (!formattedData.title || formattedData.title.length < 5) {
+        setError('Заглавието трябва да е поне 5 символа');
+        return;
+      }
+
+      if (!formattedData.description || formattedData.description.length < 10) {
+        setError('Описанието трябва да е поне 10 символа');
+        return;
+      }
+
+      if (!formattedData.location) {
+        setError('Локацията е задължителна');
+        return;
+      }
+
+      if (!formattedData.salary || !/^\d+-\d+$|^\d+$/.test(formattedData.salary)) {
+        setError('Невалиден формат за заплата');
+        return;
+      }
+
+      // Проверяваме дали job_type е валиден
+      if (!formattedData.job_type) {
+        setError('Моля, изберете тип на работата');
+        return;
+      }
+
+      console.log('Sending formatted data:', formattedData);
+
+      const response = await axios.post(
+        `${API_URL}/jobs`,
+        formattedData,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      if (response.data.success) {
+        navigate('/my-jobs');
+      } else {
+        setError(response.data.error || 'Възникна грешка при публикуване на обявата');
+      }
+    } catch (error) {
+      console.error('Error publishing job:', error.response?.data || error.message);
+      setError(
+        error.response?.data?.error || 
+        'Възникна грешка при публикуване на обявата. Моля, опитайте отново.'
+      );
+    } finally {
+      setLoading(false);
     }
-    navigate('/my-jobs');
   };
 
   return (
@@ -128,12 +206,11 @@ const PublishJobPage = () => {
                     required
                   >
                     <option value="">Изберете вид работа</option>
-                    <option value="construction">Строителство</option>
-                    <option value="repair">Ремонтни дейности</option>
-                    <option value="plumbing">ВиК услуги</option>
-                    <option value="electrical">Електро услуги</option>
-                    <option value="painting">Бояджийски услуги</option>
-                    <option value="carpentry">Дърводелски услуги</option>
+                    <option value="full-time">Пълен работен ден</option>
+                    <option value="part-time">Непълен работен ден</option>
+                    <option value="contract">Договор</option>
+                    <option value="internship">Стаж</option>
+                    <option value="remote">Дистанционна работа</option>
                   </select>
                 </div>
 
@@ -217,8 +294,9 @@ const PublishJobPage = () => {
                     <option value="">Изберете тип заетост</option>
                     <option value="full-time">Пълен работен ден</option>
                     <option value="part-time">Непълен работен ден</option>
-                    <option value="contract">Граждански договор</option>
-                    <option value="temporary">Временна заетост</option>
+                    <option value="contract">Договор</option>
+                    <option value="internship">Стаж</option>
+                    <option value="remote">Дистанционна работа</option>
                   </select>
                 </div>
 
@@ -253,6 +331,12 @@ const PublishJobPage = () => {
               ></textarea>
             </div>
 
+            {error && (
+              <div className="text-red-500 text-sm text-center">
+                {error}
+              </div>
+            )}
+
             <div className="flex justify-end space-x-4">
               <button
                 type="button"
@@ -263,9 +347,13 @@ const PublishJobPage = () => {
               </button>
               <button
                 type="submit"
-                className="px-8 py-3 bg-gray-700 text-white rounded-md hover:bg-gray-600 transform hover:scale-105 transition-all duration-300 shadow-md hover:shadow-lg"
+                disabled={loading}
+                className="px-8 py-3 bg-gray-700 text-white rounded-md hover:bg-gray-600 transform hover:scale-105 transition-all duration-300 shadow-md hover:shadow-lg disabled:opacity-50"
               >
-                {isEditing ? 'Запази промените' : 'Публикувай обява'}
+                {loading 
+                  ? 'Публикуване...' 
+                  : (isEditing ? 'Запази промените' : 'Публикувай обява')
+                }
               </button>
             </div>
           </form>

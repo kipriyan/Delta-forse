@@ -87,11 +87,11 @@ const JobsPage = () => {
           const formattedJobs = response.data.data.map(job => ({
             id: job._id || job.id,
             position: job.title || 'Няма заглавие',
-            company: job.company_name || 'Компания',
-            type: job.employment_type || 'Пълен работен ден',
+            company: job.company || 'Компания',
+            type: job.job_type || 'Пълен работен ден',
             location: job.location || 'Няма локация',
-            salary: job.salary_range || 'По договаряне',
-            skills: job.required_skills || 'Не са посочени',
+            salary: job.salary || 'По договаряне',
+            skills: job.requirements || 'Не са посочени',
             description: job.description || 'Няма описание'
           }));
           setJobs(formattedJobs);
