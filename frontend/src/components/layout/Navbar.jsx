@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 const Navbar = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { user, logout } = useAuth();
 
   const navLinks = [
     { to: "/jobs", text: "ОБЯВИ" },
@@ -10,6 +12,10 @@ const Navbar = () => {
     { to: "/my-jobs", text: "МОИТЕ ОБЯВИ" },
     { to: "/equipment", text: "ЕКИПИРОВКА" },
   ];
+
+  const handleLogout = () => {
+    logout();
+  };
 
   return (
     <nav className="bg-gray-800 shadow-lg sticky top-0 z-50">
@@ -41,18 +47,35 @@ const Navbar = () => {
             >
               ПУБЛИКУВАЙ ОБЯВА
             </Link>
-            <Link 
-              to="/login" 
-              className="text-gray-300 hover:text-white px-3 py-2 text-sm font-medium transition-all duration-300 hover:scale-105"
-            >
-              ВХОД
-            </Link>
-            <Link 
-              to="/register" 
-              className="bg-gray-700 text-white px-6 py-2 rounded-md text-sm font-medium hover:bg-gray-600 transform hover:scale-105 transition-all duration-300 shadow-md hover:shadow-lg"
-            >
-              РЕГИСТРАЦИЯ
-            </Link>
+            
+            {user ? (
+              <>
+                <span className="text-gray-300 px-3 py-2 text-sm font-medium">
+                  {user.username}
+                </span>
+                <button 
+                  onClick={handleLogout}
+                  className="bg-gray-700 text-white px-6 py-2 rounded-md text-sm font-medium hover:bg-gray-600 transform hover:scale-105 transition-all duration-300 shadow-md hover:shadow-lg"
+                >
+                  ИЗХОД
+                </button>
+              </>
+            ) : (
+              <>
+                <Link 
+                  to="/login" 
+                  className="text-gray-300 hover:text-white px-3 py-2 text-sm font-medium transition-all duration-300 hover:scale-105"
+                >
+                  ВХОД
+                </Link>
+                <Link 
+                  to="/register" 
+                  className="bg-gray-700 text-white px-6 py-2 rounded-md text-sm font-medium hover:bg-gray-600 transform hover:scale-105 transition-all duration-300 shadow-md hover:shadow-lg"
+                >
+                  РЕГИСТРАЦИЯ
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Мобилен бутон за меню */}
@@ -90,18 +113,34 @@ const Navbar = () => {
                   {link.text}
                 </Link>
               ))}
-              <Link
-                to="/login"
-                className="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700 transition-colors duration-300"
-              >
-                ВХОД
-              </Link>
-              <Link
-                to="/register"
-                className="block px-3 py-2 rounded-md text-base font-medium bg-gray-700 text-white hover:bg-gray-600 transition-colors duration-300"
-              >
-                РЕГИСТРАЦИЯ
-              </Link>
+              {user ? (
+                <>
+                  <span className="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700 transition-colors duration-300">
+                    {user.username}
+                  </span>
+                  <button 
+                    onClick={handleLogout}
+                    className="block px-3 py-2 rounded-md text-base font-medium bg-gray-700 text-white hover:bg-gray-600 transition-colors duration-300"
+                  >
+                    ИЗХОД
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    className="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700 transition-colors duration-300"
+                  >
+                    ВХОД
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="block px-3 py-2 rounded-md text-base font-medium bg-gray-700 text-white hover:bg-gray-600 transition-colors duration-300"
+                  >
+                    РЕГИСТРАЦИЯ
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         )}

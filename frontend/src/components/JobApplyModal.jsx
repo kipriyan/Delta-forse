@@ -1,15 +1,62 @@
 import React, { useState } from 'react';
+import axios from 'axios';
+import { API_URL } from '../config/config';
+import { useAuth } from '../context/AuthContext';
 
 const JobApplyModal = ({ job, isOpen, onClose, initialData, isEditing }) => {
+  const { user, token } = useAuth();
   const [formData, setFormData] = useState(initialData || {
-    name: '',
-    email: '',
+    name: user?.username || '',
+    email: user?.email || '',
     phone: '',
     coverLetter: '',
     cv: null
   });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const applicationData = {
+        applicant_name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        cover_letter: formData.coverLetter
+      };
+
+      console.log('Sending application for job:', job);
+      
+      const response = await axios.post(`${API_URL}/jobs/${job.id}/applications`, applicationData, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.data.success) {
+        onClose();
+      }
+    } catch (error) {
+      console.error('Application error:', error.response?.data);
+      setError(error.response?.data?.error || 'Възникна грешка при кандидатстване');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
@@ -30,26 +77,32 @@ const JobApplyModal = ({ job, isOpen, onClose, initialData, isEditing }) => {
             </button>
           </div>
 
-          <form className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Име и фамилия
+                Име
               </label>
               <input
                 type="text"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
                 required
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-gray-600 focus:border-transparent"
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Имейл адрес
+                Имейл
               </label>
               <input
                 type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
                 required
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-gray-600 focus:border-transparent"
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400"
               />
             </div>
 
@@ -59,7 +112,11 @@ const JobApplyModal = ({ job, isOpen, onClose, initialData, isEditing }) => {
               </label>
               <input
                 type="tel"
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-gray-600 focus:border-transparent"
+                name="phone"
+                value={formData.phone}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400"
               />
             </div>
 
@@ -68,9 +125,13 @@ const JobApplyModal = ({ job, isOpen, onClose, initialData, isEditing }) => {
                 Мотивационно писмо
               </label>
               <textarea
-                rows="4"
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-gray-600 focus:border-transparent"
-              ></textarea>
+                name="coverLetter"
+                value={formData.coverLetter}
+                onChange={handleChange}
+                required
+                rows={4}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400"
+              />
             </div>
 
             <div>
@@ -96,7 +157,15 @@ const JobApplyModal = ({ job, isOpen, onClose, initialData, isEditing }) => {
                   <div className="flex text-sm text-gray-400">
                     <label className="relative cursor-pointer rounded-md font-medium text-gray-300 hover:text-white focus-within:outline-none">
                       <span>Качи файл</span>
-                      <input type="file" className="sr-only" accept=".pdf,.doc,.docx" />
+                      <input 
+                        type="file" 
+                        className="sr-only" 
+                        accept=".pdf,.doc,.docx"
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          cv: e.target.files[0]
+                        }))}
+                      />
                     </label>
                     <p className="pl-1">или провлачете тук</p>
                   </div>
@@ -106,6 +175,12 @@ const JobApplyModal = ({ job, isOpen, onClose, initialData, isEditing }) => {
                 </div>
               </div>
             </div>
+
+            {error && (
+              <div className="text-red-500 text-sm">
+                {error}
+              </div>
+            )}
 
             <div className="flex justify-end space-x-4">
               <button
@@ -117,9 +192,10 @@ const JobApplyModal = ({ job, isOpen, onClose, initialData, isEditing }) => {
               </button>
               <button
                 type="submit"
-                className="px-6 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
+                disabled={loading}
+                className="px-6 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors disabled:opacity-50"
               >
-                {isEditing ? 'Запази промените' : 'Изпрати кандидатура'}
+                {loading ? 'Изпращане...' : (isEditing ? 'Запази промените' : 'Изпрати кандидатура')}
               </button>
             </div>
           </form>

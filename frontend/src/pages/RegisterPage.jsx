@@ -1,17 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import { API_URL } from '../config/config';
+import { useAuth } from '../context/AuthContext';
 
 const RegisterPage = () => {
+  const navigate = useNavigate();
+  const { login } = useAuth();
   const [accountType, setAccountType] = useState('person');
   const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
     email: '',
     password: '',
     confirmPassword: '',
-    firstName: '',
-    lastName: '',
     companyName: '',
-    vatNumber: ''
+    vatNumber: '',
+    user_type: 'person'
   });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -25,31 +33,44 @@ const RegisterPage = () => {
     setAccountType(type);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    
     if (formData.password !== formData.confirmPassword) {
-      alert('Паролите не съвпадат!');
+      setError('Паролите не съвпадат');
       return;
     }
 
-    // Филтрираме данните според типа акаунт
-    const submissionData = {
-      accountType,
-      email: formData.email,
-      password: formData.password,
-      ...(accountType === 'person' 
-        ? { 
-            firstName: formData.firstName,
-            lastName: formData.lastName
-          }
-        : {
-            companyName: formData.companyName,
-            vatNumber: formData.vatNumber
-          }
-      )
-    };
+    setLoading(true);
 
-    console.log('Register data:', submissionData);
+    try {
+      const submitData = {
+        username: accountType === 'person' 
+          ? `${formData.firstName} ${formData.lastName}`
+          : formData.companyName,
+        email: formData.email,
+        password: formData.password,
+        user_type: accountType === 'business' ? 'company' : 'person',
+        ...(accountType === 'business' && { vatNumber: formData.vatNumber })
+      };
+
+      const response = await axios.post(`${API_URL}/auth/register`, submitData, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        withCredentials: true
+      });
+
+      if (response.data.success) {
+        login(response.data.user, response.data.token);
+        navigate('/');
+      }
+    } catch (error) {
+      setError(error.response?.data?.error || 'Възникна грешка при регистрация');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -200,11 +221,20 @@ const RegisterPage = () => {
             </div>
 
             <div>
+              {error && (
+                <div className="text-red-500 text-center mb-4">
+                  {error}
+                </div>
+              )}
+            </div>
+
+            <div>
               <button
                 type="submit"
-                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                disabled={loading}
+                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50"
               >
-                Регистрация
+                {loading ? 'Регистрация...' : 'Регистрация'}
               </button>
             </div>
           </form>

@@ -142,7 +142,12 @@ const register = async () => {
   ]);
   
   // Изпращаме данните към сървъра
-  const result = await makeRequest('post', '/auth/register', answers);
+  const result = await makeRequest('POST', '/api/auth/register', {
+    username: answers.username,
+    email: answers.email,
+    password: answers.password,
+    user_type: answers.user_type
+  });
   
   if (result.success) {
     console.log(chalk.green('✅ Регистрацията е успешна!'));
@@ -195,7 +200,10 @@ const login = async () => {
   ]);
   
   try {
-    const response = await axios.post(`${API_URL}/auth/login`, { email, password });
+    const response = await makeRequest('POST', '/api/auth/login', {
+      email: email,
+      password: password
+    });
     
     if (response.data.success) {
       currentUser = response.data.user;
@@ -324,7 +332,7 @@ const testCreateJob = async () => {
   ]);
   
   // Изпълнение на заявката за създаване на обява
-  const result = await makeRequest('post', '/jobs', answers);
+  const result = await makeRequest('POST', '/api/jobs', answers);
   
   // Извеждане на резултата
   if (result.success) {
@@ -426,7 +434,7 @@ const createEquipment = async () => {
   
   try {
     console.log('Създаване на обява за екипировка...');
-    console.log(`Ще изпратим заявка към: ${API_URL}/equipment`);
+    console.log(`Ще изпратим заявка към: ${API_URL}/api/equipment`);
     console.log('Данни:', JSON.stringify(answers, null, 2));
     console.log('Използван токен:', currentToken.substring(0, 15) + '...');
     
@@ -436,7 +444,7 @@ const createEquipment = async () => {
     };
     
     // Опитваме директно с правилен URL
-    const response = await axios.post(`${API_URL}/equipment`, answers, { headers });
+    const response = await axios.post(`${API_URL}/api/equipment`, answers, { headers });
     
     if (response.data && response.data.success) {
       console.log(chalk.green(`✅ Обявата за екипировка създадена успешно! ID: ${response.data.data.id}`));
@@ -467,7 +475,7 @@ const applyForJob = async () => {
   try {
     // Директно извикване на axios за по-добър контрол
     console.log('Извикване на GET /api/jobs...');
-    const response = await axios.get(`${API_URL}/jobs`, {
+    const response = await axios.get(`${API_URL}/api/jobs`, {
       headers: currentToken ? { Authorization: `Bearer ${currentToken}` } : {}
     });
     
@@ -503,7 +511,7 @@ const applyForJob = async () => {
     console.log(chalk.yellow(`Изпращане на POST заявка към /api/jobs/${jobId}/apply...`));
     
     const applyResponse = await axios.post(
-      `${API_URL}/jobs/${jobId}/apply`,
+      `${API_URL}/api/jobs/${jobId}/apply`,
       applicationData,
       { headers: { Authorization: `Bearer ${currentToken}` } }
     );
@@ -535,7 +543,7 @@ return null;
 }
 
 // Получаване на списък с налична екипировка
-const equipmentResult = await makeRequest('get', '/equipment', { status: 'available', limit: 10 });
+const equipmentResult = await makeRequest('get', '/api/equipment', { status: 'available', limit: 10 });
 
 if (!equipmentResult.success || !equipmentResult.data.data.length) {
 console.log(chalk.red('❌ Няма налична екипировка за наемане'));
@@ -612,7 +620,7 @@ message: message || null
 };
 
 // Изпълнение на заявката за наемане
-const result = await makeRequest('post', '/equipment-rentals', rentalData);
+const result = await makeRequest('POST', '/api/equipment-rentals', rentalData);
 
 // Извеждане на резултата
 if (result.success) {
@@ -672,7 +680,9 @@ const formData = new FormData();
 formData.append('file', fs.createReadStream(filePath));
 
 // Изпълнение на заявката за качване
-const result = await makeRequest('post', `/upload/${fileType}`, formData, {}, true);
+const result = await makeRequest('POST', '/api/upload', null, {
+  file: formData
+});
 
 // Извеждане на резултата
 if (result.success) {
@@ -719,7 +729,7 @@ const manageApplications = async () => {
     console.log(chalk.yellow('Извличане на вашите обяви...'));
     
     // Конфигурираме axios с по-голям таймаут
-    const jobsResponse = await axios.get(`${API_URL}/profile/jobs`, {
+    const jobsResponse = await axios.get(`${API_URL}/api/profile/jobs`, {
       headers: { Authorization: `Bearer ${currentToken}` },
       timeout: 15000 // 15 секунди таймаут
     });
@@ -750,7 +760,7 @@ const manageApplications = async () => {
     // Зареждане на кандидатурите за избраната обява
     console.log(chalk.yellow(`Зареждане на кандидатури за обява ${jobId}...`));
     
-    const appsResponse = await axios.get(`${API_URL}/jobs/${jobId}/applications`, {
+    const appsResponse = await axios.get(`${API_URL}/api/jobs/${jobId}/applications`, {
       headers: { Authorization: `Bearer ${currentToken}` }
     });
     
@@ -803,7 +813,7 @@ const manageApplications = async () => {
     
     try {
       const updateResponse = await axios.put(
-        `${API_URL}/jobs/applications/${applicationId}`,
+        `${API_URL}/api/jobs/applications/${applicationId}`,
         { status },
         { headers: { Authorization: `Bearer ${currentToken}` } }
       );
@@ -848,7 +858,7 @@ const manageOwnApplications = async () => {
     // Извличане на всички кандидатури на потребителя
     console.log(chalk.yellow('Извличане на вашите кандидатури...'));
     
-    const appsResponse = await axios.get(`${API_URL}/profile/applications`, {
+    const appsResponse = await axios.get(`${API_URL}/api/profile/applications`, {
       headers: { Authorization: `Bearer ${currentToken}` },
       timeout: 15000 // 15 секунди таймаут
     });
@@ -927,7 +937,7 @@ const manageOwnApplications = async () => {
       console.log(chalk.yellow('Обновяване на кандидатурата...'));
       
       const updateResponse = await axios.put(
-        `${API_URL}/profile/applications/${applicationId}`,
+        `${API_URL}/api/profile/applications/${applicationId}`,
         { cover_letter: coverLetter },
         { headers: { Authorization: `Bearer ${currentToken}` } }
       );
@@ -959,7 +969,7 @@ const manageOwnApplications = async () => {
       console.log(chalk.yellow('Изтриване на кандидатурата...'));
       
       const deleteResponse = await axios.delete(
-        `${API_URL}/profile/applications/${applicationId}`,
+        `${API_URL}/api/profile/applications/${applicationId}`,
         { headers: { Authorization: `Bearer ${currentToken}` } }
       );
       
