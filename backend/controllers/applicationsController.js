@@ -169,8 +169,9 @@ exports.getJobApplications = asyncHandler(async (req, res, next) => {
 // @access  Private (потребителят за своята кандидатура или компанията за промяна на статус)
 exports.updateApplication = asyncHandler(async (req, res, next) => {
   const { id } = req.params;
-  
-  // Получаване на кандидатурата
+  const { status, cover_letter, resume_url, phone_number } = req.body;
+
+  // Проверка дали кандидатурата съществува
   const [application] = await pool.execute(
     'SELECT * FROM job_applications WHERE id = ?',
     [id]
@@ -180,28 +181,35 @@ exports.updateApplication = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse(`Не е намерена кандидатура с ID ${id}`, 404));
   }
 
-  const currentApplication = application[0];
-
-  // Проверка на правата
-  const isCompany = req.user.id === currentApplication.company_id || req.user.user_type === 'admin';
-  const isApplicant = req.user.id === currentApplication.user_id;
-
-  if (!isCompany && !isApplicant) {
-    return next(new ErrorResponse('Нямате права да актуализирате тази кандидатура', 403));
+  // Проверка на правата (потребител или компания/собственик на обявата)
+  const isApplicant = req.user.id === application[0].user_id;
+  
+  // Вземаме информация за обявата, за да проверим собственика
+  const [jobInfo] = await pool.execute(
+    'SELECT j.*, c.user_id as employer_id FROM job_listings j LEFT JOIN companies c ON j.company_id = c.id WHERE j.id = ?',
+    [application[0].job_id]
+  );
+  
+  if (jobInfo.length === 0) {
+    return next(new ErrorResponse(`Не е намерена обява за тази кандидатура`, 404));
+  }
+  
+  const isEmployer = req.user.id === jobInfo[0].employer_id || req.user.id === jobInfo[0].user_id;
+  const isAdmin = req.user.user_type === 'admin';
+  
+  if (!isApplicant && !isEmployer && !isAdmin) {
+    return next(new ErrorResponse('Нямате права да модифицирате тази кандидатура', 403));
   }
 
-  // Ако е компания, може да променя само статуса
-  if (isCompany) {
-    const { status } = req.body;
-    if (!status || !['pending', 'reviewed', 'interview', 'rejected', 'accepted'].includes(status)) {
-      return next(new ErrorResponse('Невалиден статус', 400));
+  // Ако е работодател, може да променя само статуса
+  if (isEmployer || isAdmin) {
+    if (status) {
+      await pool.execute(
+        'UPDATE job_applications SET status = ? WHERE id = ?',
+        [status, id]
+      );
     }
-
-    await pool.execute(
-      'UPDATE job_applications SET status = ? WHERE id = ?',
-      [status, id]
-    );
-  } 
+  }
   // Ако е кандидат, може да променя само съпроводителното писмо и резюмето
   else if (isApplicant) {
     const { cover_letter, resume_url, phone_number } = req.body;
@@ -209,20 +217,20 @@ exports.updateApplication = asyncHandler(async (req, res, next) => {
     await pool.execute(
       'UPDATE job_applications SET cover_letter = ?, resume_url = ?, phone_number = ? WHERE id = ?',
       [
-        cover_letter || currentApplication.cover_letter,
-        resume_url || currentApplication.resume_url,
-        phone_number || currentApplication.phone_number,
+        cover_letter || application[0].cover_letter,
+        resume_url || application[0].resume_url,
+        phone_number || application[0].phone_number,
         id
       ]
     );
   }
 
-  // Получаване на актуализираната кандидатура
+  // Вземане на обновената кандидатура с детайли за работата
   const [updatedApplication] = await pool.execute(`
     SELECT ja.*, j.title as job_title, c.company_name
     FROM job_applications ja
     INNER JOIN job_listings j ON ja.job_id = j.id
-    INNER JOIN companies c ON ja.company_id = c.id
+    INNER JOIN companies c ON j.company_id = c.id
     WHERE ja.id = ?
   `, [id]);
 
