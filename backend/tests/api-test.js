@@ -680,8 +680,10 @@ const formData = new FormData();
 formData.append('file', fs.createReadStream(filePath));
 
 // Изпълнение на заявката за качване
-const result = await makeRequest('POST', '/api/upload', null, {
-  file: formData
+const result = await makeRequest('POST', '/api/upload', formData, {
+  headers: {
+    'Content-Type': 'multipart/form-data'
+  }
 });
 
 // Извеждане на резултата

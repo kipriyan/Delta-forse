@@ -7,7 +7,7 @@ const JobListing = require('../models/JobListing');
 // @route   POST /api/applications
 // @access  Private
 exports.applyForJob = asyncHandler(async (req, res, next) => {
-  const { job_id, cover_letter, resume_url, resume_file } = req.body;
+  const { job_id, cover_letter, resume_url, resume_file, phone_number } = req.body;
 
   // Проверка дали обявата съществува
   const job = await JobListing.findById(job_id);
@@ -38,8 +38,8 @@ exports.applyForJob = asyncHandler(async (req, res, next) => {
   // Създаване на кандидатурата
   const [result] = await pool.execute(
     `INSERT INTO job_applications 
-      (job_id, user_id, company_id, cover_letter, resume_url, resume_file, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      (job_id, user_id, company_id, cover_letter, resume_url, resume_file, phone_number, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       job_id, 
       req.user.id, 
@@ -47,6 +47,7 @@ exports.applyForJob = asyncHandler(async (req, res, next) => {
       cover_letter || null,
       resume_url || null,
       resume_file || null,
+      phone_number || null,
       'pending'
     ]
   );
@@ -203,13 +204,14 @@ exports.updateApplication = asyncHandler(async (req, res, next) => {
   } 
   // Ако е кандидат, може да променя само съпроводителното писмо и резюмето
   else if (isApplicant) {
-    const { cover_letter, resume_url } = req.body;
+    const { cover_letter, resume_url, phone_number } = req.body;
     
     await pool.execute(
-      'UPDATE job_applications SET cover_letter = ?, resume_url = ? WHERE id = ?',
+      'UPDATE job_applications SET cover_letter = ?, resume_url = ?, phone_number = ? WHERE id = ?',
       [
         cover_letter || currentApplication.cover_letter,
         resume_url || currentApplication.resume_url,
+        phone_number || currentApplication.phone_number,
         id
       ]
     );

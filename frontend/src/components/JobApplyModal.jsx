@@ -58,11 +58,37 @@ const JobApplyModal = ({ job, isOpen, onClose, initialData, isEditing }) => {
     setLoading(true);
 
     try {
+      // Ако има CV файл, първо го качваме
+      let cvUrl = null;
+      if (formData.cv) {
+        const fileFormData = new FormData();
+        fileFormData.append('file', formData.cv);
+
+        const uploadResponse = await axios.post(
+          `${API_URL}/upload`,
+          fileFormData,
+          {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        );
+
+        if (uploadResponse.data.success) {
+          cvUrl = uploadResponse.data.data.fileUrl;
+        } else {
+          setError('Грешка при качване на CV файла');
+          return;
+        }
+      }
+
       const applicationData = {
         applicant_name: formData.name,
         email: formData.email,
-        phone: formData.phone,
-        cover_letter: formData.coverLetter
+        phone_number: formData.phone,
+        cover_letter: formData.coverLetter,
+        cv: cvUrl
       };
 
       console.log('Sending application for job:', job);

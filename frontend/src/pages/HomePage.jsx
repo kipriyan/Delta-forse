@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 const HomePage = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -7,7 +7,6 @@ const HomePage = () => {
 
   const handleSearch = (e) => {
     e.preventDefault();
-    // Навигираме към JobsPage с параметъра за търсене
     navigate(`/jobs?search=${encodeURIComponent(searchQuery)}`);
   };
 
@@ -41,10 +40,54 @@ const HomePage = () => {
               </button>
             </div>
           </form>
+
+          {/* Секция с мъдри мисли */}
+          <div className="mt-12 max-w-3xl mx-auto">
+            <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-8 shadow-xl border border-gray-700">
+              <div className="flex items-start space-x-6">
+                <div className="text-yellow-500">
+                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                      d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" 
+                    />
+                  </svg>
+                </div>
+                <div className="text-left">
+                  <h3 className="text-xl font-semibold text-gray-200 mb-3">
+                    Мисъл на деня
+                  </h3>
+                  <p className="text-gray-300 italic mb-4">
+                    "Изберете работа, която обичате, и няма да ви се налага да работите нито един ден от живота си."
+                  </p>
+                  <p className="text-gray-400 text-sm">
+                    - Конфуций
+                  </p>
+                </div>
+              </div>
+              <div className="mt-6 pt-6 border-t border-gray-700">
+                <div className="flex items-center justify-between text-sm text-gray-400">
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" 
+                      />
+                    </svg>
+                    <span>Обновява се всеки ден</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" 
+                      />
+                    </svg>
+                    <span>Вдъхновяващи цитати за кариерно развитие</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-
-      {/* Останалата част от HomePage */}
     </div>
   );
 };

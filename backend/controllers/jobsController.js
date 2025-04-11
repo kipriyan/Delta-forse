@@ -316,7 +316,7 @@ exports.applyForJob = asyncHandler(async (req, res) => {
     }
     
     // Взимаме данните от заявката
-    const { cover_letter, resume_url = null } = req.body;
+    const { cover_letter, resume_url = null, phone_number } = req.body;
     
     // Проверка за качен файл (ако имплементирате качване на файлове)
     let resume_file = null;
@@ -324,11 +324,19 @@ exports.applyForJob = asyncHandler(async (req, res) => {
       resume_file = req.file.filename;
     }
     
-    // Връщаме колоните resume_url и resume_file в заявката
+    // Коригирана заявка: 7 параметъра -> 7 стойности
     const [result] = await pool.execute(
-      `INSERT INTO job_applications (job_id, user_id, cover_letter, resume_url, resume_file, status, created_at)
-       VALUES (?, ?, ?, ?, ?, 'pending', NOW())`,
-      [jobId, userId, cover_letter, resume_url, resume_file]
+      `INSERT INTO job_applications (job_id, user_id, cover_letter, resume_url, resume_file, phone_number, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        jobId,
+        userId,
+        cover_letter || null,
+        resume_url || null,
+        resume_file || null,
+        phone_number || null,
+        'pending'  // Подаваме status като параметър, а не като хардкодирана стойност
+      ]
     );
     
     if (result.affectedRows > 0) {
@@ -341,6 +349,7 @@ exports.applyForJob = asyncHandler(async (req, res) => {
           cover_letter,
           resume_url,
           resume_file,
+          phone_number,
           status: 'pending'
         }
       });

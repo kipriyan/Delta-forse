@@ -8,6 +8,7 @@ class JobApplication {
     this.company_id = applicationData.company_id;
     this.cover_letter = applicationData.cover_letter;
     this.resume_url = applicationData.resume_url;
+    this.phone_number = applicationData.phone_number;
     this.status = applicationData.status;
     this.created_at = applicationData.created_at;
     this.updated_at = applicationData.updated_at;
@@ -17,14 +18,15 @@ class JobApplication {
     try {
       const [result] = await pool.execute(
         `INSERT INTO job_applications 
-        (job_id, user_id, company_id, cover_letter, resume_url, status) 
-        VALUES (?, ?, ?, ?, ?, ?)`,
+        (job_id, user_id, company_id, cover_letter, resume_url, phone_number, status) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           applicationData.job_id,
           applicationData.user_id,
           applicationData.company_id,
           applicationData.cover_letter || null,
           applicationData.resume_url || null,
+          applicationData.phone_number || null,
           applicationData.status || 'pending'
         ]
       );
@@ -87,11 +89,12 @@ class JobApplication {
     try {
       await pool.execute(
         `UPDATE job_applications SET 
-        cover_letter = ?, resume_url = ?, status = ?
+        cover_letter = ?, resume_url = ?, phone_number = ?, status = ?
         WHERE id = ?`,
         [
           applicationData.cover_letter || null,
           applicationData.resume_url || null,
+          applicationData.phone_number || null,
           applicationData.status || 'pending',
           id
         ]

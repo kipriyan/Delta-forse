@@ -1,14 +1,57 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import JobApplyModal from '../components/JobApplyModal';
+import axios from 'axios';
+import { API_URL } from '../config/config';
+import { useAuth } from '../context/AuthContext';
 
 const MyJobsPage = () => {
+  const [jobs, setJobs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const { token } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('applications');
   const [selectedJob, setSelectedJob] = useState(null);
   const [showApplications, setShowApplications] = useState(false);
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [editingApplication, setEditingApplication] = useState(null);
+  const [showApplicationsModal, setShowApplicationsModal] = useState(false);
+  const [selectedJobApplications, setSelectedJobApplications] = useState([]);
+
+  useEffect(() => {
+    const fetchMyJobs = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/profile/jobs`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.data.success) {
+          const formattedJobs = response.data.data.map(job => ({
+            id: job._id || job.id,
+            position: job.title || 'Няма заглавие',
+            company: job.company || 'Частно лице',
+            type: job.job_type || 'Пълен работен ден',
+            location: job.location || 'Няма локация',
+            salary: job.salary || 'По договаряне',
+            skills: job.requirements || 'Не са посочени',
+            description: job.description || 'Няма описание',
+            status: job.application_status || job.status || 'new'
+          }));
+          setJobs(formattedJobs);
+        }
+      } catch (err) {
+        setError('Грешка при зареждане на обявите');
+        console.error('Error fetching jobs:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMyJobs();
+  }, [token]);
 
   const applications = [
     {
@@ -117,109 +160,195 @@ const MyJobsPage = () => {
     }
   ];
 
-  const ApplicationsModal = ({ job, onClose }) => {
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div className="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-          <div className="p-6">
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <h2 className="text-2xl font-bold text-white mb-2">{job.position}</h2>
-                <p className="text-gray-400">{job.company}</p>
-              </div>
-              <button
-                onClick={onClose}
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+  const fetchJobApplications = async (jobId) => {
+    try {
+      const response = await axios.get(`${API_URL}/jobs/${jobId}/applications`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
 
-            <div className="space-y-6">
-              {job.applicants.map(applicant => (
-                <div key={applicant.id} className="bg-gray-700 rounded-lg p-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="text-xl font-semibold text-white">{applicant.name}</h3>
-                      <div className="mt-2 space-y-1 text-gray-300">
-                        <p>Email: {applicant.email}</p>
-                        <p>Телефон: {applicant.phone}</p>
-                        <p>Опит: {applicant.experience}</p>
-                        <p>Дата на кандидатстване: {applicant.appliedDate}</p>
-                      </div>
-                    </div>
-                    <div className="flex space-x-2">
-                      <button 
-                        className="px-4 py-2 bg-green-600/20 text-green-400 rounded-md hover:bg-green-600/30 transition-colors"
-                        onClick={() => console.log('Одобрен', applicant.id)}
-                      >
-                        Одобри
-                      </button>
-                      <button 
-                        className="px-4 py-2 bg-red-600/20 text-red-400 rounded-md hover:bg-red-600/30 transition-colors"
-                        onClick={() => console.log('Отхвърлен', applicant.id)}
-                      >
-                        Отхвърли
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="mt-4">
-                    <h4 className="text-lg font-medium text-white mb-2">Мотивационно писмо</h4>
-                    <p className="text-gray-300">{applicant.coverLetter}</p>
-                  </div>
-
-                  <div className="mt-4 flex items-center space-x-4">
-                    <a 
-                      href={applicant.cv}
-                      className="inline-flex items-center px-4 py-2 bg-gray-600 text-gray-200 rounded-md hover:bg-gray-500 transition-colors"
-                    >
-                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      Изтегли CV
-                    </a>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Функция за изтриване на обява
-  const handleDeleteJob = (jobId) => {
-    if (window.confirm('Сигурни ли сте, че искате да изтриете тази обява?')) {
-      // Тук ще добавим заявка към backend-a за изтриване
-      console.log('Deleting job:', jobId);
+      if (response.data.success) {
+        return response.data.data.map(app => ({
+          id: app._id,
+          applicant_name: app.applicant_name,
+          email: app.email,
+          phone_number: app.phone_number,
+          created_at: app.created_at,
+          status: app.status,
+          cover_letter: app.cover_letter,
+          cv: app.cv_url
+        }));
+      }
+      return [];
+    } catch (error) {
+      console.error('Error fetching applications:', error);
+      return [];
     }
   };
 
-  const handleEdit = (app) => {
-    // Вместо да отваряме модален прозорец, навигираме към PublishJobPage
-    // с данните за редактиране
+  const handleViewApplications = async (job) => {
+    const applications = await fetchJobApplications(job.id);
+    setSelectedJobApplications(applications);
+    setShowApplicationsModal(true);
+  };
+
+  const handleUpdateApplicationStatus = async (applicationId, newStatus) => {
+    try {
+      const response = await axios.put(
+        `${API_URL}/jobs/applications/${applicationId}`,
+        { status: newStatus },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      if (response.data.success) {
+        // Обновяваме локалния списък с кандидатури
+        setSelectedJobApplications(prevApps =>
+          prevApps.map(app =>
+            app.id === applicationId ? { ...app, status: newStatus } : app
+          )
+        );
+      }
+    } catch (error) {
+      console.error('Error updating application status:', error);
+    }
+  };
+
+  const ApplicationsModal = ({ applications, onClose }) => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+      <div className="bg-gray-800 rounded-lg w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+        <div className="p-8">
+          <div className="flex justify-between items-center mb-8">
+            <h2 className="text-3xl font-bold text-white">Кандидатури</h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-white">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {applications.length === 0 ? (
+            <p className="text-gray-400 text-center py-8">Все още няма кандидатури</p>
+          ) : (
+            <div className="space-y-8">
+              {applications.map((app) => (
+                <div key={app.id || app._id} className="bg-gray-700 p-6 rounded-lg">
+                  <div className="flex justify-between items-start mb-6">
+                    <div>
+                      <h3 className="text-2xl font-semibold text-white mb-2">{app.applicant_name}</h3>
+                      <div className="space-y-2">
+                        <p className="text-gray-300 flex items-center">
+                          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                          {app.email}
+                        </p>
+                        <p className="text-gray-300 flex items-center">
+                          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                          </svg>
+                          {app.phone_number || 'Няма посочен телефон'}
+                        </p>
+                        <p className="text-gray-300 flex items-center">
+                          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          Кандидатствал на: {new Date(app.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end space-y-4">
+                      <span className={`px-4 py-2 rounded-full text-sm font-medium 
+                        ${app.status === 'pending' ? 'bg-yellow-500/20 text-yellow-300' : 
+                          app.status === 'approved' ? 'bg-green-500/20 text-green-300' : 
+                          app.status === 'rejected' ? 'bg-red-500/20 text-red-300' : 
+                          'bg-gray-600 text-gray-300'}`}
+                      >
+                        {app.status === 'pending' ? 'Разглежда се' : 
+                         app.status === 'approved' ? 'Одобрена' : 
+                         app.status === 'rejected' ? 'Отхвърлена' : 'Нова'}
+                      </span>
+                      {app.status === 'pending' && (
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleUpdateApplicationStatus(app.id, 'approved')}
+                            className="px-4 py-2 bg-green-600/20 text-green-400 rounded-md hover:bg-green-600/30 transition-colors"
+                          >
+                            Одобри
+                          </button>
+                          <button
+                            onClick={() => handleUpdateApplicationStatus(app.id, 'rejected')}
+                            className="px-4 py-2 bg-red-600/20 text-red-400 rounded-md hover:bg-red-600/30 transition-colors"
+                          >
+                            Отхвърли
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-800 p-4 rounded-lg mb-4">
+                    <h4 className="text-lg font-medium text-white mb-3">Мотивационно писмо</h4>
+                    <p className="text-gray-300 whitespace-pre-wrap">{app.cover_letter}</p>
+                  </div>
+
+                  {app.cv && (
+                    <div className="flex items-center justify-between bg-gray-800 p-4 rounded-lg">
+                      <span className="text-gray-300">CV на кандидата</span>
+                      <a 
+                        href={app.cv} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center px-4 py-2 bg-gray-700 text-blue-400 rounded-md hover:bg-gray-600 transition-colors"
+                      >
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Изтегли CV
+                      </a>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const handleEdit = (job) => {
     navigate('/publish-job', { 
       state: { 
         isEditing: true,
-        jobData: {
-          id: app.id,
-          title: app.position,
-          company: app.company,
-          location: app.location,
-          salary: app.salary,
-          type: app.type || 'full-time',
-          description: app.description || '',
-          requirements: app.requirements || '',
-          benefits: app.benefits || '',
-          category: app.category || '',
-          industry: app.industry || ''
-        }
-      }
+        jobData: job
+      } 
     });
+  };
+
+  const handleDelete = async (jobId) => {
+    if (!window.confirm('Сигурни ли сте, че искате да изтриете тази обява?')) {
+      return;
+    }
+
+    try {
+      const response = await axios.delete(`${API_URL}/jobs/${jobId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.data.success) {
+        setJobs(jobs.filter(job => job.id !== jobId));
+      }
+    } catch (error) {
+      setError('Грешка при изтриване на обявата');
+      console.error('Error deleting job:', error);
+    }
   };
 
   return (
@@ -271,74 +400,58 @@ const MyJobsPage = () => {
             </button>
           </div>
 
-          {/* Списък с кандидатури */}
+          {/* Списък с обяви */}
           {activeTab === 'applications' && (
             <div className="space-y-4">
-              {applications.map(app => (
-                <div key={app.id} className="bg-gray-800 p-6 rounded-lg shadow-md">
+              {jobs.map(job => (
+                <div key={job.id} className="bg-gray-800 p-6 rounded-lg shadow-md">
                   <div className="flex justify-between items-start">
                     <div>
-                      <h3 className="text-xl font-semibold text-gray-200">{app.position}</h3>
-                      <p className="text-gray-400 mt-1">{app.company}</p>
+                      <h3 className="text-xl font-semibold text-gray-200">{job.position}</h3>
+                      <p className="text-gray-400 mt-1">{job.company}</p>
                     </div>
                     <div className="flex items-center space-x-4">
                       <span className={`px-3 py-1 rounded-full text-sm font-medium 
-                        ${app.status === 'Разглежда се' ? 'bg-yellow-500/20 text-yellow-300' : 
-                          app.status === 'Одобрена' ? 'bg-green-500/20 text-green-300' : 
-                          'bg-gray-600 text-gray-300'}`}>
-                        {app.status}
+                        ${job.status === 'pending' ? 'bg-yellow-500/20 text-yellow-300' : 
+                          job.status === 'approved' ? 'bg-green-500/20 text-green-300' : 
+                          'bg-gray-600 text-gray-300'}`}
+                      >
+                        {job.status === 'pending' ? 'Разглежда се' : 
+                         job.status === 'approved' ? 'Одобрена' : 'Нова'}
                       </span>
                       <button
-                        onClick={() => handleEdit(app)}
-                        className="text-blue-400 hover:text-blue-300 transition-colors p-1"
-                        title="Редактирай обявата"
+                        onClick={() => handleEdit(job)}
+                        className="text-blue-400 hover:text-blue-300 transition-colors"
                       >
-                        <svg 
-                          className="w-5 h-5" 
-                          fill="none" 
-                          stroke="currentColor" 
-                          viewBox="0 0 24 24"
-                        >
-                          <path 
-                            strokeLinecap="round" 
-                            strokeLinejoin="round" 
-                            strokeWidth="2" 
-                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                          />
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
                       </button>
                       <button
-                        onClick={() => handleDeleteJob(app.id)}
-                        className="text-red-400 hover:text-red-300 transition-colors p-1"
-                        title="Изтрий обявата"
+                        onClick={() => handleDelete(job.id)}
+                        className="text-red-400 hover:text-red-300 transition-colors"
                       >
-                        <svg 
-                          className="w-5 h-5" 
-                          fill="none" 
-                          stroke="currentColor" 
-                          viewBox="0 0 24 24"
-                        >
-                          <path 
-                            strokeLinecap="round" 
-                            strokeLinejoin="round" 
-                            strokeWidth="2" 
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                          />
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
                       </button>
                     </div>
                   </div>
                   <div className="mt-4 flex items-center text-sm text-gray-400 space-x-4">
-                    <span>{app.location}</span>
-                    <span>{app.salary}</span>
-                    <span>Кандидатствано на: {app.appliedDate}</span>
+                    <span>{job.location}</span>
+                    <span>{job.type}</span>
+                    <span>{job.salary}</span>
+                  </div>
+                  <p className="mt-4 text-gray-300">{job.description}</p>
+                  <div className="mt-4 text-sm text-gray-400">
+                    <span>Изисквания: {job.skills}</span>
                   </div>
                   <div className="mt-4 flex space-x-4">
                     <button 
                       className="text-gray-300 hover:text-gray-100 font-medium transition-colors duration-300"
                       onClick={() => {
-                        setSelectedJob(app);
-                        setShowApplications(true);
+                        setSelectedJob(job);
+                        handleViewApplications(job);
                       }}
                     >
                       Виж кандидатури →
@@ -407,7 +520,7 @@ const MyJobsPage = () => {
                         {application.status}
                       </span>
                       <button
-                        onClick={() => handleDeleteJob(application.id)}
+                        onClick={() => handleDelete(application.id)}
                         className="text-red-400 hover:text-red-300 transition-colors p-1"
                         title="Оттегли кандидатурата"
                       >
@@ -467,12 +580,12 @@ const MyJobsPage = () => {
       </div>
 
       {/* Модален прозорец за кандидатурите */}
-      {showApplications && selectedJob && activeTab === 'applications' && (
+      {showApplicationsModal && selectedJob && activeTab === 'applications' && (
         <ApplicationsModal
-          job={selectedJob}
+          applications={selectedJobApplications}
           onClose={() => {
             setSelectedJob(null);
-            setShowApplications(false);
+            setShowApplicationsModal(false);
           }}
         />
       )}
