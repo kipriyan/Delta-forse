@@ -27,7 +27,7 @@ class EquipmentRental {
   // Създаване на нова заявка за наемане
   static async create(rentalData) {
     try {
-      // Получаване на собственика на екипировката
+      // Получаване на собственика на екипировката и цената
       const [equipmentOwner] = await pool.execute(
         'SELECT user_id, price FROM equipment WHERE id = ?',
         [rentalData.equipment_id]
@@ -38,28 +38,28 @@ class EquipmentRental {
       }
       
       // Изчисляване на общата цена
-      const start = new Date(rentalData.rental_start);
-      const end = new Date(rentalData.rental_end);
+      const start = new Date(rentalData.start_date);
+      const end = new Date(rentalData.end_date);
       const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
       const total_price = days * equipmentOwner[0].price;
       
-      // Вмъкване на заявката за наемане с правилните имена на колоните според таблицата
+      // Вмъкване на заявката за наемане
       const [result] = await pool.execute(`
         INSERT INTO rental_requests (
           user_id, equipment_id, start_date, end_date,
-          total_price, status, message
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          total_price, status, message, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
       `, [
         rentalData.user_id,
         rentalData.equipment_id,
-        rentalData.rental_start,
-        rentalData.rental_end,
+        rentalData.start_date,
+        rentalData.end_date,
         total_price,
         'pending',
         rentalData.message || null
       ]);
       
-      // Получаване на създадената заявка с детайли - премахваме несъществуващото поле image_url
+      // Получаване на създадената заявка с детайли
       const [rental] = await pool.execute(`
         SELECT r.*, e.title as equipment_title, 
           e.price as daily_rate, 
@@ -74,11 +74,12 @@ class EquipmentRental {
         WHERE r.id = ?
       `, [result.insertId]);
       
-      // Преобразуване на имената на полетата за съвместимост с останалия код
+      // Добавяме полета за съвместимост със съществуващия код
       const rentalWithCompatibleFields = {
         ...rental[0],
         rental_start: rental[0].start_date,
-        rental_end: rental[0].end_date
+        rental_end: rental[0].end_date,
+        owner_id: equipmentOwner[0].user_id
       };
       
       return new EquipmentRental(rentalWithCompatibleFields);
@@ -207,7 +208,7 @@ class EquipmentRental {
   static async updateStatus(id, status, message = null) {
     try {
       // Проверка за валиден статус
-      const validStatuses = ['pending', 'approved', 'rejected', 'cancelled', 'completed'];
+      const validStatuses = ['pending', 'approved', 'rejected'];
       if (!validStatuses.includes(status)) {
         throw new Error('Невалиден статус');
       }
@@ -218,14 +219,14 @@ class EquipmentRental {
       if (message) {
         query = `
           UPDATE rental_requests
-          SET status = ?, message = ?, updated_at = NOW()
+          SET status = ?, message = ?
           WHERE id = ?
         `;
         params = [status, message, id];
       } else {
         query = `
           UPDATE rental_requests
-          SET status = ?, updated_at = NOW()
+          SET status = ?
           WHERE id = ?
         `;
         params = [status, id];

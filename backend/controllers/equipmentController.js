@@ -7,62 +7,82 @@ const { pool } = require('../config/db');
 // @route   POST /api/equipment
 // @access  Private
 exports.createEquipment = asyncHandler(async (req, res, next) => {
-  // Добавяне на user_id от аутентикирания потребител
-  req.body.user_id = req.user.id;
-  
-  // Създаване на обявата за екипировка
-  const equipment = await Equipment.create(req.body);
-  
-  res.status(201).json({
-    success: true,
-    data: equipment
-  });
+  try {
+    // Добавяне на user_id от аутентикирания потребител
+    req.body.user_id = req.user.id;
+    
+    // Преобразуваме price от лева в число
+    if (req.body.price && typeof req.body.price === 'string') {
+      req.body.price = parseFloat(req.body.price.replace(/[^\d.-]/g, ''));
+    }
+    
+    // Валидация на задължителни полета
+    if (!req.body.title || !req.body.description || req.body.price === undefined || !req.body.location) {
+      return res.status(400).json({
+        success: false,
+        error: 'Моля, попълнете всички задължителни полета'
+      });
+    }
+    
+    // Създаване на обявата за екипировка
+    const equipment = await Equipment.create(req.body);
+    
+    res.status(201).json({
+      success: true,
+      data: equipment
+    });
+  } catch (error) {
+    console.error('Грешка при създаване на екипировка:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Сървърна грешка при създаване на обявата'
+    });
+  }
 });
 
 // @desc    Получаване на всички обяви за екипировка
 // @route   GET /api/equipment
 // @access  Public
 exports.getAllEquipment = asyncHandler(async (req, res, next) => {
-  // Извличане на параметрите за филтриране от заявката
-  const {
-    page = 1,
-    limit = 10,
-    category,
-    location,
-    condition,
-    min_daily_rate,
-    max_daily_rate,
-    status,
-    available_from
-  } = req.query;
-  
-  // Създаване на обект с филтрите
-  const filters = {
-    category,
-    location,
-    condition,
-    min_daily_rate,
-    max_daily_rate,
-    status,
-    available_from
-  };
-  
-  // Филтриране само по валидни филтри (не undefined)
-  Object.keys(filters).forEach(key => {
-    if (filters[key] === undefined) {
-      delete filters[key];
-    }
-  });
-  
-  // Получаване на екипировката от базата данни
-  const result = await Equipment.findAll(page, limit, filters);
-  
-  res.status(200).json({
-    success: true,
-    count: result.equipment.length,
-    pagination: result.pagination,
-    data: result.equipment
-  });
+  try {
+    // Извличане на query параметрите
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    
+    console.log('Получена заявка за оборудване:', {
+      page,
+      limit,
+      query: req.query
+    });
+    
+    // Извличаме оборудването
+    const result = await Equipment.findAll(page, limit, req.query);
+    
+    // Логиране на резултата за дебъгване
+    console.log('Резултат от заявката:', {
+      count: result.equipment.length,
+      firstItem: result.equipment.length > 0 ? {
+        id: result.equipment[0].id,
+        title: result.equipment[0].title,
+        ownerName: result.equipment[0].owner_name,
+        userId: result.equipment[0].user_id
+      } : null
+    });
+    
+    // Коригирана структура на отговора - масивът с оборудване директно в data
+    res.json({
+      success: true,
+      count: result.equipment.length,
+      pagination: result.pagination,
+      data: result.equipment
+    });
+  } catch (err) {
+    console.error('Грешка при извличане на оборудване:', err);
+    res.status(500).json({
+      success: false,
+      error: 'Грешка при извличане на оборудване'
+    });
+  }
 });
 
 // @desc    Получаване на конкретна екипировка по ID

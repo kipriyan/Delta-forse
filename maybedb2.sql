@@ -76,15 +76,6 @@ CREATE TABLE equipment (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Таблица за снимки на оборудване
-CREATE TABLE equipment_images (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    equipment_id INT,
-    image_url VARCHAR(255) NOT NULL,
-    is_primary BOOLEAN DEFAULT FALSE,
-    FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE
-);
-
 -- Таблица за спецификации на оборудване
 CREATE TABLE equipment_specifications (
     id INT PRIMARY KEY AUTO_INCREMENT,

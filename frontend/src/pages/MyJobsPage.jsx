@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import JobApplyModal from '../components/JobApplyModal';
 import axios from 'axios';
@@ -22,6 +22,9 @@ const MyJobsPage = () => {
   const [loadingMyApplications, setLoadingMyApplications] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [applicationToDelete, setApplicationToDelete] = useState(null);
+  const [savedJobs, setSavedJobs] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     const fetchMyJobs = async () => {
@@ -86,6 +89,7 @@ const MyJobsPage = () => {
           location: app.location || 'Няма локация',
           salary: app.salary || 'По договаряне',
           coverLetter: app.cover_letter || '',
+          phone_number: app.phone_number,
           cv: app.resume_url
         }));
         
@@ -99,86 +103,9 @@ const MyJobsPage = () => {
   };
 
   const applications = [
-    {
-      id: 1,
-      position: "Senior Frontend Developer",
-      company: "TechCorp Ltd.",
-      status: "Разглежда се",
-      appliedDate: "2024-02-15",
-      location: "София",
-      salary: "4000-6000 лв.",
-      applicants: [
-        {
-          id: 1,
-          name: "Иван Иванов",
-          email: "ivan@example.com",
-          phone: "0888 123 456",
-          appliedDate: "2024-02-15",
-          status: "pending",
-          experience: "5 години",
-          coverLetter: "Здравейте, бих искал да кандидатствам за позицията...",
-          cv: "ivan-cv.pdf"
-        }
-      ]
-    },
-    {
-      id: 2,
-      position: "UX Designer",
-      company: "DesignPro Ltd.",
-      status: "Одобрена",
-      appliedDate: "2024-02-10",
-      location: "Пловдив",
-      salary: "3000-4000 лв.",
-      applicants: [
-        {
-          id: 1,
-          name: "Мария Петрова",
-          email: "maria@example.com",
-          phone: "0888 456 789",
-          appliedDate: "2024-02-10",
-          status: "approved",
-          experience: "3 години",
-          coverLetter: "Уважаеми господине/госпожо, С настоящото писмо бих искала...",
-          cv: "maria-cv.pdf"
-        }
-      ]
-    }
+
   ];
 
-  const savedJobs = [
-    {
-      id: 1,
-      position: "UX/UI Designer",
-      company: "DesignStudio Ltd.",
-      savedDate: "2024-02-14",
-      location: "Пловдив",
-      salary: "3000-4500 лв.",
-      applicants: [
-        {
-          id: 1,
-          name: "Иван Иванов",
-          email: "ivan@example.com",
-          phone: "0888 123 456",
-          appliedDate: "2024-02-16",
-          status: "pending",
-          experience: "5 години",
-          coverLetter: "Здравейте, бих искал да кандидатствам за позицията...",
-          cv: "ivan-cv.pdf"
-        },
-        {
-          id: 2,
-          name: "Мария Петрова",
-          email: "maria@example.com",
-          phone: "0888 456 789",
-          appliedDate: "2024-02-15",
-          status: "pending",
-          experience: "3 години",
-          coverLetter: "Уважаеми господине/госпожо, С настоящото писмо бих искала...",
-          cv: "maria-cv.pdf"
-        }
-      ]
-    }
-  ];
 
   const fetchJobApplications = async (jobId) => {
     try {
@@ -410,21 +337,20 @@ const MyJobsPage = () => {
     }
   };
 
-  // Функция за редактиране на кандидатура - оправена
+  // Функция за редактиране на кандидатура
   const handleEditApplication = (application) => {
-    console.log("Редактиране на кандидатура:", application);
+    console.log("Редактиране на кандидатура, пълни данни:", application);
     setSelectedJob({
       id: application.job_id,
       position: application.jobTitle
     });
     
+    // Важно: използваме точните имена на полетата от данните
     setEditingApplication({
       id: application.id,
       cover_letter: application.coverLetter || '',
       resume_url: application.cv || '',
-      phone_number: application.phone_number || '',
-      email: application.email || user?.email || '',
-      job_id: application.job_id
+      phone_number: application.phone_number || '', // Използваме phone_number консистентно
     });
     
     setShowApplyModal(true);
@@ -465,277 +391,366 @@ const MyJobsPage = () => {
     </div>
   );
 
-  // Модален прозорец за кандидатстване/редактиране (обновен)
+  // Коригиран компонент JobApplyModal, за да работи с данните от запазените обяви
   const JobApplyModal = ({ job, onClose, editMode, applicationData, onSubmitSuccess }) => {
+    // Добавена проверка и правилно извличане на ID на обявата
+    const jobId = job.job_id || job.id;
+    
+    // Използваме само необходимите състояния
     const [coverLetter, setCoverLetter] = useState('');
     const [cvFile, setCvFile] = useState(null);
     const [cvUrl, setCvUrl] = useState('');
-    const [phoneNumber, setPhoneNumber] = useState('');
-    const [email, setEmail] = useState('');
+    const [phone, setPhone] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [applicationId, setApplicationId] = useState(null);
+    const [email, setEmail] = useState('');
 
+    // Зареждаме данните първоначално
     useEffect(() => {
       if (editMode && applicationData) {
         setCoverLetter(applicationData.cover_letter || '');
         setCvUrl(applicationData.resume_url || '');
-        setPhoneNumber(applicationData.phone_number || '');
-        setEmail(applicationData.email || user?.email || '');
+        setPhone(applicationData.phone_number || '');
         setApplicationId(applicationData.id);
-      } else {
-        // За нова кандидатура, използваме имейла на потребителя по подразбиране
-        setEmail(user?.email || '');
+        setEmail(applicationData.email || '');
       }
-    }, [editMode, applicationData, user]);
+    }, [editMode, applicationData]);
 
-    const handleSubmit = async (e) => {
-      e.preventDefault();
+    // Функция за обновяване на телефонния номер
+    const handlePhoneNumberChange = (e) => {
+      const newValue = e.target.value;
+      console.log("Нов телефонен номер:", newValue);
+      setPhone(newValue);
+    };
+
+    // Форматиране на данните от формата
+    const formData = {
+      job_id: jobId,
+      name: name,
+      email: email,
+      phone: phone,
+      cover_letter: coverLetter,
+      // ... existing code ...
+    };
+
+    // Опростена функция за отпращане на формата
+    const submitForm = async () => {
+      // Вземаме текущата стойност от input полето директно
+      const currentPhoneNumber = document.querySelector('input[type="tel"]').value;
+      console.log("При изпращане - телефонен номер:", currentPhoneNumber);
+      
       setIsSubmitting(true);
-      setError('');
-
+      
       try {
-        // Създаваме обикновен обект вместо FormData, за да избегнем проблеми с undefined
-        const appData = {
-          cover_letter: coverLetter || '',
-          phone_number: phoneNumber, // Винаги изпращаме телефонния номер, дори ако е празен стринг
-          email: email || user?.email || '',
-          job_id: job.id
-        };
-        
-        console.log("Изпращане на данни:", appData); // Debugging
-        
-        let response;
-        
+        // Само за редактиране
         if (editMode && applicationId) {
-          console.log("Редактиране на кандидатура с ID:", applicationId);
+          // Създаваме изцяло нов обект за данните
+          const requestPayload = {
+            cover_letter: coverLetter,
+            phone_number: currentPhoneNumber
+          };
           
-          // За редактиране използваме axios.put с JSON данни
-          response = await axios.put(
-            `${API_URL}/profile/applications/${applicationId}`, 
-            appData,
-            {
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              }
+          // Проверяваме точно какво изпращаме
+          console.log("ТОЧНО ТОВА ИЗПРАЩАМЕ:", JSON.stringify(requestPayload));
+          
+          // Директно изпращане с ясното заявка
+          const response = await axios({
+            method: 'put',
+            url: `${API_URL}/profile/applications/${applicationId}`,
+            data: requestPayload,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
             }
-          );
+          });
           
-          console.log("Отговор от сървъра:", response.data); // Debugging
+          console.log("ОТГОВОР ОТ СЪРВЪРА:", response.data);
           
-          // Ако има файл, изпращаме го отделно
-          if (cvFile) {
-            const formData = new FormData();
-            formData.append('resume', cvFile);
-            
-            await axios.post(
-              `${API_URL}/profile/applications/${applicationId}/resume`, 
-              formData,
-              {
-                headers: {
-                  'Content-Type': 'multipart/form-data',
-                  'Authorization': `Bearer ${token}`
-                }
-              }
-            );
+          if (response.data && response.data.success) {
+            // ВАЖНО: Изчакваме fetchMyApplications да завърши
+            await fetchMyApplications();
+            onClose();
+          } else {
+            setError('Грешка при обновяване на данните');
           }
         } else {
-          // За нова кандидатура използваме FormData, тъй като имаме файл
-          const formData = new FormData();
-          
-          // Винаги добавяме всички полета, дори ако са празни
-          formData.append('cover_letter', coverLetter || '');
-          formData.append('phone_number', phoneNumber);
-          formData.append('email', email || '');
-          formData.append('job_id', job.id);
-          
-          // Добавяме CV файл, ако има такъв
-          if (cvFile) {
-            formData.append('resume', cvFile);
-          }
-          
-          response = await axios.post(
-            `${API_URL}/jobs/${job.id}/apply`, 
-            formData,
-            {
-              headers: {
-                'Content-Type': 'multipart/form-data',
-                'Authorization': `Bearer ${token}`
-              }
-            }
-          );
-        }
-
-        if (response.data.success) {
-          console.log("Успешно обновени данни:", response.data.data); // Debugging
-          onSubmitSuccess(response.data.data);
-          
-          // Обновяване на списъка с кандидатури ако сме в редактиращ режим
-          if (editMode) {
-            fetchMyApplications();
-          }
-        } else {
-          setError(response.data.error || 'Възникна грешка. Моля, опитайте отново.');
+          // ... existing code for new application ...
         }
       } catch (err) {
-        console.error('Error submitting application:', err);
-        setError(err.response?.data?.error || 'Възникна грешка. Моля, опитайте отново.');
+        console.error("ГРЕШКА ПРИ ИЗПРАЩАНЕ:", err);
+        setError('Възникна грешка');
       } finally {
         setIsSubmitting(false);
       }
     };
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div className="bg-gray-800 rounded-lg w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold text-gray-200">
-              {editMode ? 'Редактиране на кандидатура' : 'Кандидатстване'} за {job.position}
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75">
+        <div className="bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="p-6">
+            <h2 className="text-2xl font-bold text-white mb-4">
+              {editMode ? 'Редактиране на кандидатура' : `Кандидатстване за ${job.position}`}
             </h2>
-            <button 
-              className="text-gray-400 hover:text-gray-200"
-              onClick={onClose}
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          
-          {error && (
-            <div className="bg-red-500/20 text-red-300 p-3 rounded-md mb-4">
-              {error}
-            </div>
-          )}
-          
-          <form onSubmit={handleSubmit}>
-            <div className="mb-4">
-              <label className="block text-gray-300 mb-2 font-medium">
-                Телефонен номер (незадължителен)
-              </label>
-              <input
-                type="tel"
-                value={phoneNumber}
-                onChange={e => setPhoneNumber(e.target.value)}
-                className="w-full bg-gray-700 text-gray-200 rounded-md p-3"
-                placeholder="Вашият телефонен номер"
-              />
-              <p className="text-sm text-gray-400 mt-1">
-                Оставете празно, ако не желаете да предоставите телефонен номер
-              </p>
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-gray-300 mb-2 font-medium">
-                Имейл адрес
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full bg-gray-700 text-gray-200 rounded-md p-3"
-                placeholder="Вашият имейл адрес"
-                required
-              />
-            </div>
             
-            <div className="mb-4">
-              <label className="block text-gray-300 mb-2 font-medium">
-                Мотивационно писмо
-              </label>
-              <textarea
-                value={coverLetter}
-                onChange={e => setCoverLetter(e.target.value)}
-                className="w-full bg-gray-700 text-gray-200 rounded-md p-3 min-h-[200px]"
-                placeholder="Защо искате тази позиция?"
-                required
-              ></textarea>
-            </div>
-            
-            <div className="mb-4">
-              <label className="block text-gray-300 mb-2 font-medium">
-                CV / Резюме
-              </label>
-              
-              {/* Показване на текущото CV с опция за изтегляне */}
-              {cvUrl && (
-                <div className="flex items-center justify-between bg-gray-700 p-3 rounded-md mb-2">
-                  <span className="text-gray-300 truncate max-w-[70%]">
-                    {cvUrl.split('/').pop() || 'Текущо CV'}
-                  </span>
-                  <div className="flex space-x-2">
-                    <a 
-                      href={cvUrl}
-                      className="text-blue-400 hover:text-blue-300 flex items-center"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      Изтегли
-                    </a>
-                  </div>
+            <form>
+              {error && (
+                <div className="mb-4 p-3 bg-red-500 bg-opacity-25 border border-red-500 rounded-md text-red-500">
+                  {error}
                 </div>
               )}
               
-              {/* Качване на ново CV */}
-              <div className="bg-gray-700 border border-dashed border-gray-500 rounded-md p-4 text-center">
-                <input
-                  type="file"
-                  id="cv-upload"
-                  className="hidden"
-                  accept=".pdf,.doc,.docx"
-                  onChange={e => setCvFile(e.target.files[0])}
-                />
-                <label
-                  htmlFor="cv-upload"
-                  className="cursor-pointer flex flex-col items-center text-gray-300 hover:text-gray-100"
-                >
-                  <svg className="w-10 h-10 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
-                  <span>
-                    {cvFile ? cvFile.name : editMode ? 'Сменете CV файла' : 'Качете своето CV (PDF, DOC, DOCX)'}
-                  </span>
+              {/* Поле за телефонен номер с явен onChange handler */}
+              <div className="mb-4">
+                <label className="block text-gray-300 mb-2 font-medium">
+                  Телефонен номер
                 </label>
-                {cvFile && (
-                  <div className="mt-2 text-sm text-gray-400">
-                    Избран файл: {cvFile.name}
-                  </div>
-                )}
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={handlePhoneNumberChange}
+                  className="w-full bg-gray-700 text-gray-200 rounded-md p-3"
+                  placeholder="Въведете телефонен номер за контакт"
+                />
               </div>
-            </div>
-            
-            <div className="flex justify-end space-x-3 mt-6">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 bg-gray-700 text-gray-300 rounded-md hover:bg-gray-600"
-              >
-                Отказ
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <div className="flex items-center">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                    Изпращане...
+
+              {/* Поле за мотивационно писмо */}
+              <div className="mb-4">
+                <label className="block text-gray-300 mb-2 font-medium">
+                  Мотивационно писмо
+                </label>
+                <textarea
+                  value={coverLetter}
+                  onChange={(e) => setCoverLetter(e.target.value)}
+                  className="w-full bg-gray-700 text-gray-200 rounded-md p-3 min-h-[150px]"
+                  placeholder="Добавете вашето мотивационно писмо"
+                ></textarea>
+              </div>
+              
+              {/* CV / Резюме */}
+              <div className="mb-4">
+                <label className="block text-gray-300 mb-2 font-medium">
+                  CV / Резюме
+                </label>
+                
+                {/* Показване на текущото CV с опция за изтегляне */}
+                {cvUrl && (
+                  <div className="flex items-center justify-between bg-gray-700 p-3 rounded-md mb-2">
+                    <span className="text-gray-300 truncate max-w-[70%]">
+                      {cvUrl.split('/').pop() || 'Текущо CV'}
+                    </span>
+                    <div className="flex space-x-2">
+                      <a 
+                        href={cvUrl}
+                        className="text-blue-400 hover:text-blue-300 flex items-center"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Изтегли
+                      </a>
+                    </div>
                   </div>
-                ) : (
-                  editMode ? 'Запази промените' : 'Кандидатствай'
                 )}
-              </button>
-            </div>
-          </form>
+                
+                {/* Качване на ново CV */}
+                <div className="bg-gray-700 border border-dashed border-gray-500 rounded-md p-4 text-center">
+                  <input
+                    type="file"
+                    id="cv-upload"
+                    className="hidden"
+                    accept=".pdf,.doc,.docx"
+                    onChange={e => setCvFile(e.target.files[0])}
+                  />
+                  <label
+                    htmlFor="cv-upload"
+                    className="cursor-pointer flex flex-col items-center text-gray-300 hover:text-gray-100"
+                  >
+                    <svg className="w-10 h-10 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    <span>
+                      {cvFile ? cvFile.name : editMode ? 'Сменете CV файла' : 'Качете своето CV (PDF, DOC, DOCX)'}
+                    </span>
+                  </label>
+                  {cvFile && (
+                    <div className="mt-2 text-sm text-gray-400">
+                      Избран файл: {cvFile.name}
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 bg-gray-700 text-gray-300 rounded-md hover:bg-gray-600"
+                >
+                  Отказ
+                </button>
+                <button
+                  type="button"
+                  onClick={submitForm}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                      Изпращане...
+                    </div>
+                  ) : (
+                    editMode ? 'Запази промените' : 'Кандидатствай'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
     );
   };
+
+  // Обновена функция за извличане на запазените обяви
+  const fetchSavedJobs = async () => {
+    setIsLoading(true);
+    try {
+      // Коригиран URL според истинския endpoint в бекенда
+      const response = await axios.get(`${API_URL}/saved-jobs`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      console.log('Получени запазени обяви:', response.data);
+      
+      // Обработка на отговора според формата от savedJobsController
+      if (response.data.success) {
+        // Форматиране на данните според отговора
+        const formattedSavedJobs = response.data.data.map(job => ({
+          id: job.id || job._id,
+          job_id: job.job_id,
+          position: job.title || 'Няма заглавие',
+          company: job.company_name || 'Частно лице',
+          type: job.job_type || 'Пълен работен ден',
+          location: job.location || 'Няма локация',
+          salary: job.salary || 'По договаряне',
+          saved_at: new Date(job.saved_at || job.created_at).toLocaleDateString(),
+          skills: job.skills || []
+        }));
+        setSavedJobs(formattedSavedJobs);
+      } else {
+        setSavedJobs([]);
+      }
+      setError(null);
+    } catch (err) {
+      console.error('Грешка при зареждане на запазени обяви:', err);
+      setError('Не успяхме да заредим запазените обяви. Моля, опитайте отново.');
+      setSavedJobs([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Обновена функция за премахване на обява от запазени
+  const handleRemoveFromSaved = async (jobId) => {
+    try {
+      // Коригиран URL според истинския endpoint в бекенда
+      await axios.delete(`${API_URL}/saved-jobs/${jobId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      // Успешно премахване - обновяваме списъка локално
+      setSavedJobs(prevSavedJobs => prevSavedJobs.filter(job => job.job_id !== jobId));
+      
+      // Показваме съобщение за успех
+      setSuccessMessage('Обявата е премахната от запазени успешно');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error('Грешка при премахване от запазени:', err);
+      setError('Не успяхме да премахнем обявата от запазени. Моля, опитайте отново.');
+    }
+  };
+
+  // Добавяне на функция за запазване на обява
+  const handleSaveJob = async (jobId) => {
+    try {
+      await axios.post(`${API_URL}/saved-jobs`, 
+        { job_id: jobId },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      // Обновяваме списъка със запазени обяви
+      if (activeTab === 'saved') {
+        fetchSavedJobs();
+      }
+      
+      // Показваме съобщение за успех
+      setSuccessMessage('Обявата е запазена успешно');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error('Грешка при запазване на обява:', err);
+      setError('Не успяхме да запазим обявата. Моля, опитайте отново.');
+    }
+  };
+
+  // Допълваме съществуващия useEffect, за да зарежда запазените обяви при смяна на таба
+  useEffect(() => {
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+
+    if (activeTab === 'applications') {
+      // Директно код за зареждане на обявите
+      const getMyJobs = async () => {
+        setIsLoading(true);
+        try {
+          const response = await axios.get(`${API_URL}/profile/jobs`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+
+          if (response.data.success) {
+            const formattedJobs = response.data.data.map(job => ({
+              id: job._id || job.id,
+              position: job.title || 'Няма заглавие',
+              company: job.company || 'Частно лице',
+              type: job.job_type || 'Пълен работен ден',
+              location: job.location || 'Няма локация',
+              salary: job.salary || 'По договаряне',
+              skills: job.requirements || 'Не са посочени',
+              description: job.description || 'Няма описание',
+              status: job.application_status || job.status || 'new'
+            }));
+            setJobs(formattedJobs);
+          }
+        } catch (err) {
+          setError('Грешка при зареждане на обявите');
+          console.error('Error fetching jobs:', err);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      
+      getMyJobs();
+    } else if (activeTab === 'saved') {
+      fetchSavedJobs();
+    } else if (activeTab === 'my-applications') {
+      fetchMyApplications();
+    }
+  }, [activeTab, token, navigate]);
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-900 to-gray-800">
@@ -851,37 +866,47 @@ const MyJobsPage = () => {
           {/* Списък със запазени обяви */}
           {activeTab === 'saved' && (
             <div className="space-y-4">
-              {savedJobs.map(job => (
-                <div key={job.id} className="bg-gray-800 p-6 rounded-lg shadow-md">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-xl font-semibold text-gray-200">{job.position}</h3>
-                      <p className="text-gray-400 mt-1">{job.company}</p>
-                    </div>
-                    <button className="text-gray-400 hover:text-gray-200">
-                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                      </svg>
-                    </button>
-                  </div>
-                  <div className="mt-4 flex items-center text-sm text-gray-400 space-x-4">
-                    <span>{job.location}</span>
-                    <span>{job.salary}</span>
-                    <span>Запазено на: {job.savedDate}</span>
-                  </div>
-                  <div className="mt-4 flex space-x-4">
-                    <button 
-                      className="text-green-400 hover:text-green-300 font-medium transition-colors duration-300"
-                      onClick={() => {
-                        setSelectedJob(job);
-                        setShowApplyModal(true);
-                      }}
-                    >
-                      Кандидатствай
-                    </button>
-                  </div>
+              {savedJobs.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-400">Нямате запазени обяви</p>
                 </div>
-              ))}
+              ) : (
+                savedJobs.map(job => (
+                  <div key={job.id || job.job_id} className="bg-gray-800 p-6 rounded-lg shadow-md">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="text-xl font-semibold text-gray-200">{job.position}</h3>
+                        <p className="text-gray-400 mt-1">{job.company}</p>
+                      </div>
+                      <button 
+                        className="text-yellow-400 hover:text-yellow-300"
+                        onClick={() => handleRemoveFromSaved(job.job_id)}
+                        title="Премахни от запазени"
+                      >
+                        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div className="mt-4 flex items-center text-sm text-gray-400 space-x-4">
+                      <span>{job.location}</span>
+                      <span>{job.salary}</span>
+                      <span>Запазено на: {job.saved_at}</span>
+                    </div>
+                    <div className="mt-4 flex space-x-4">
+                      <button 
+                        className="text-green-400 hover:text-green-300 font-medium transition-colors duration-300"
+                        onClick={() => {
+                          setSelectedJob(job);
+                          setShowApplyModal(true);
+                        }}
+                      >
+                        Кандидатствай
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           )}
 

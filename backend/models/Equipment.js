@@ -1,20 +1,23 @@
 const { pool } = require('../config/db');
 
 class Equipment {
-  constructor(equipmentData) {
-    this.id = equipmentData.id;
-    this.user_id = equipmentData.user_id;
-    this.title = equipmentData.title;
-    this.description = equipmentData.description;
-    this.price = equipmentData.price;
-    this.location = equipmentData.location;
-    this.category = equipmentData.category;
-    this.status = equipmentData.status;
-    this.created_at = equipmentData.created_at;
+  constructor(data) {
+    this.id = data.id;
+    this.title = data.title;
+    this.description = data.description;
+    this.price = data.price;
+    this.category = data.category;
+    this.status = data.status;
+    this.location = data.location;
+    this.image_url = data.image_url;
+    this.is_available = data.is_available;
+    this.user_id = data.user_id;
+    this.created_at = data.created_at;
+    this.updated_at = data.updated_at;
     
-    // Допълнителни полета след JOIN
-    this.owner_name = equipmentData.owner_name;
-    this.owner_email = equipmentData.owner_email;
+    // Запазваме информацията за собственика
+    this.owner_name = data.owner_name;
+    this.owner_email = data.owner_email;
   }
 
   // Създаване на нова обява за екипировка
@@ -33,8 +36,9 @@ class Equipment {
 
       const [result] = await pool.execute(`
         INSERT INTO equipment (
-          user_id, title, description, price, location, category, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          user_id, title, description, price, location, category, 
+          status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
       `, [
         safeData.user_id,
         safeData.title,
@@ -46,8 +50,7 @@ class Equipment {
       ]);
 
       const [equipment] = await pool.execute(`
-        SELECT e.*, u.first_name, u.last_name, u.email,
-          CONCAT(u.first_name, ' ', u.last_name) as owner_name, 
+        SELECT e.*, CONCAT(u.first_name, ' ', u.last_name) as owner_name, 
           u.email as owner_email
         FROM equipment e
         LEFT JOIN users u ON e.user_id = u.id
@@ -87,114 +90,110 @@ class Equipment {
   // Намиране на всичката екипировка с пагинация и филтриране
   static async findAll(page = 1, limit = 10, filters = {}) {
     try {
-      // Преобразуване на page и limit в числа, за да сме сигурни
-      page = Number(page);
-      limit = Number(limit);
+      // Проверка и конвертиране на page и limit към числа
+      page = parseInt(page, 10) || 1;
+      limit = parseInt(limit, 10) || 10;
+      const offset = (page - 1) * limit;
       
+      console.log('Извличане на оборудване:', { page, limit, offset, filters });
+      
+      // Генериране на базова заявка
       let query = `
-        SELECT e.*, u.first_name, u.last_name, u.email,
+        SELECT e.*, 
           CONCAT(u.first_name, ' ', u.last_name) as owner_name, 
           u.email as owner_email
         FROM equipment e
-        LEFT JOIN users u ON e.user_id = u.id
+        JOIN users u ON e.user_id = u.id
         WHERE 1=1
       `;
       
-      const queryParams = [];
+      // Създаване на масив за параметрите
+      let params = [];
       
-      // Добавяне на филтри към заявката
+      // Добавяне на условия за филтриране ако има такива
+      if (filters.search) {
+        query += ' AND (e.title LIKE ? OR e.description LIKE ?)';
+        params.push(`%${filters.search}%`, `%${filters.search}%`);
+      }
+      
       if (filters.category) {
-        query += ` AND e.category = ?`;
-        queryParams.push(filters.category);
+        query += ' AND e.category = ?';
+        params.push(filters.category);
       }
       
       if (filters.location) {
-        query += ` AND e.location LIKE ?`;
-        queryParams.push(`%${filters.location}%`);
+        query += ' AND e.location LIKE ?';
+        params.push(`%${filters.location}%`);
       }
       
-      // Полето condition не съществува в таблицата - премахваме го
-      
-      // Полетата min_daily_rate и max_daily_rate също не съществуват
-      // Вместо това трябва да филтрираме по цена (price)
       if (filters.min_price) {
-        query += ` AND e.price >= ?`;
-        queryParams.push(Number(filters.min_price));
+        query += ' AND e.price >= ?';
+        params.push(parseFloat(filters.min_price));
       }
       
       if (filters.max_price) {
-        query += ` AND e.price <= ?`;
-        queryParams.push(Number(filters.max_price));
+        query += ' AND e.price <= ?';
+        params.push(parseFloat(filters.max_price));
       }
       
       if (filters.status) {
-        query += ` AND e.status = ?`;
-        queryParams.push(filters.status);
-      } else {
-        // По подразбиране показваме само достъпната екипировка
-        query += ` AND e.status = 'available'`;
+        query += ' AND e.status = ?';
+        params.push(filters.status);
       }
       
-      // Пагинация - директно вграждаме числата вместо да използваме параметри
-      const offset = (page - 1) * limit;
-      query += ` ORDER BY e.created_at DESC LIMIT ${Number(limit)} OFFSET ${Number(offset)}`;
+      // Заявка за общия брой резултати
+      let countQuery = query.replace("e.*, CONCAT(u.first_name, ' ', u.last_name) as owner_name, u.email as owner_email", "COUNT(*) as total");
       
-      // Изпълнение на заявката
-      const [equipment] = await pool.execute(query, queryParams);
+      const [countResult] = await pool.execute(countQuery, params);
+      const total = countResult[0]?.total || 0;
+      console.log('Общ брой резултати:', total);
       
-      // Получаване на общия брой резултати
-      let countQuery = `
-        SELECT COUNT(*) as total
-        FROM equipment e
-        WHERE 1=1
-      `;
+      // Добавяне на сортиране
+      query += ' ORDER BY e.created_at DESC';
       
-      const countParams = [];
+      // Добавяне на LIMIT и OFFSET
+      query += ` LIMIT ${limit} OFFSET ${offset}`;
       
-      // Добавяне на същите филтри към заявката за броене
-      if (filters.category) {
-        countQuery += ` AND e.category = ?`;
-        countParams.push(filters.category);
+      console.log('SQL заявка:', query);
+      console.log('Параметри:', params);
+      
+      // Тестова заявка за директно логиране на всички потребители
+      const [users] = await pool.execute("SELECT id, CONCAT(first_name, ' ', last_name) as full_name FROM users");
+      console.log('Потребители в базата:', users);
+      
+      // Изпълнение на основната заявка
+      const [equipment] = await pool.execute(query, params);
+      
+      console.log('Брой извлечени оборудвания:', equipment.length);
+      if (equipment.length > 0) {
+        console.log('Първо оборудване:', {
+          id: equipment[0].id,
+          title: equipment[0].title,
+          owner_name: equipment[0].owner_name,
+          user_id: equipment[0].user_id
+        });
+        
+        // Проверяваме за валидни user_id в данните
+        console.log('User IDs в оборудването:', equipment.map(item => item.user_id));
+        
+        // Директна проверка за потребител с ID-то от първото оборудване
+        if (equipment[0].user_id) {
+          const [specificUser] = await pool.execute(
+            "SELECT id, CONCAT(first_name, ' ', last_name) as full_name FROM users WHERE id = ?", 
+            [equipment[0].user_id]
+          );
+          console.log('Проверка за потребител:', specificUser);
+        }
       }
       
-      if (filters.location) {
-        countQuery += ` AND e.location LIKE ?`;
-        countParams.push(`%${filters.location}%`);
-      }
-      
-      // Премахваме полето condition
-      
-      // Променяме полетата за цена
-      if (filters.min_price) {
-        countQuery += ` AND e.price >= ?`;
-        countParams.push(Number(filters.min_price));
-      }
-      
-      if (filters.max_price) {
-        countQuery += ` AND e.price <= ?`;
-        countParams.push(Number(filters.max_price));
-      }
-      
-      if (filters.status) {
-        countQuery += ` AND e.status = ?`;
-        countParams.push(filters.status);
-      } else {
-        // По подразбиране показваме само достъпната екипировка
-        countQuery += ` AND e.status = 'available'`;
-      }
-      
-      // Премахваме полето available_from
-      
-      const [countResult] = await pool.execute(countQuery, countParams);
-      const total = countResult[0].total;
-      
+      // Връщане на резултата с пълната информация за собствениците
       return {
         equipment: equipment.map(item => new Equipment(item)),
         pagination: {
           page,
           limit,
-          total,
-          pages: Math.ceil(total / limit)
+          total: parseInt(countResult[0].total, 10),
+          pages: Math.ceil(countResult[0].total / limit)
         }
       };
     } catch (error) {

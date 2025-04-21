@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
+import { API_URL } from '../config/config';
 
 const EquipmentPage = () => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('rent');
   const [showPublishForm, setShowPublishForm] = useState(false);
   const [selectedEquipment, setSelectedEquipment] = useState(null);
@@ -19,304 +23,533 @@ const EquipmentPage = () => {
   });
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [editingEquipment, setEditingEquipment] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [categories, setCategories] = useState(['tools', 'construction', 'machinery', 'other']);
+  const [equipmentList, setEquipmentList] = useState([]);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    pages: 0
+  });
+  const [filters, setFilters] = useState({
+    search: '',
+    category: '',
+    minPrice: '',
+    maxPrice: '',
+    location: ''
+  });
+  const [showRentRequestForm, setShowRentRequestForm] = useState(false);
+  const [rentalRequestData, setRentalRequestData] = useState({
+    startDate: '',
+    endDate: '',
+    message: ''
+  });
 
-  // Примерни данни за екипировка
-  const equipmentList = [
-    {
-      id: 1,
-      title: "Професионален перфоратор Bosch",
-      description: "Мощен перфоратор, подходящ за строителни дейности",
-      price: "50 лв. / ден",
-      location: "София",
-      owner: "Иван Иванов",
-      category: "tools",
-      contact: "0888 123 456",
-      images: [
-        "/images/equipment1-1.jpg",
-        "/images/equipment1-2.jpg",
-        "/images/equipment1-3.jpg"
-      ],
-      specifications: {
-        brand: "Bosch",
-        model: "GBH 2-26 DRE",
-        power: "800W",
-        weight: "2.7 кг"
-      }
-    },
-    {
-      id: 2,
-      title: "Скеле 8м",
-      description: "Алуминиево скеле, подходящо за външни ремонти",
-      price: "100 лв. / ден",
-      location: "Пловдив",
-      owner: "Строителни услуги ООД",
-      category: "construction",
-      contact: "0888 456 789"
-    }
-  ];
-
-  // Примерни данни за заявки за наемане
-  const rentalRequests = [
-    {
-      id: 1,
-      equipmentId: 1,
-      renterName: "Петър Петров",
-      renterPhone: "0888 111 222",
-      startDate: "2024-03-20",
-      endDate: "2024-03-25",
-      status: "pending",
-      message: "Бих искал да наема оборудването за строителен проект."
-    },
-    // Още заявки...
-  ];
-
-  // Примерни данни за заявки
-  const [myRequests, setMyRequests] = useState([
-    {
-      id: 1,
-      equipmentTitle: "Професионален перфоратор Bosch",
-      owner: "Иван Иванов",
-      startDate: "2024-03-20",
-      endDate: "2024-03-25",
-      status: "pending",
-      message: "Бих искал да наема оборудването за строителен проект.",
-      totalPrice: "250 лв."
-    },
-    // Още заявки...
-  ]);
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setEquipmentData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleImageUpload = (e) => {
-    // Тук ще добавим логика за качване на изображения
-    console.log('Uploaded files:', e.target.files);
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    console.log('Equipment Data:', equipmentData);
-    setShowPublishForm(false);
-  };
-
-  const handleRentalSubmit = (e) => {
-    e.preventDefault();
-    console.log('Rental request:', { equipment, ...rentalData });
-    // Тук ще добавим логика за изпращане на заявката
-  };
-
-  // Намираме оригиналната екипировка по заявката
-  const findEquipmentByRequest = (request) => {
-    return equipmentList.find(eq => eq.title === request.equipmentTitle) || {
-      id: request.id,
-      title: request.equipmentTitle,
-      description: "Информация за екипировката",
-      price: request.totalPrice,
-      location: "Локация",
-      owner: request.owner,
-      contact: "Контакт",
-      images: ["/images/placeholder.jpg"],
-      specifications: {
-        "Статус на заявка": request.status === 'pending' ? 'В изчакване' : 
-                           request.status === 'approved' ? 'Одобрена' : 'Отказана',
-        "Период": `${request.startDate} - ${request.endDate}`,
-        "Обща цена": request.totalPrice
+  // Зареждане на категориите при монтиране на компонента
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/equipment/categories`);
+        console.log('Получени категории:', res.data);
+        
+        if (res.data.success && Array.isArray(res.data.data)) {
+          // Проверка на данните и задаване на стандартни категории при проблем
+          const validCategories = res.data.data.filter(cat => typeof cat === 'string' && cat);
+          setCategories(validCategories.length > 0 ? validCategories : ['tools', 'construction', 'machinery', 'other']);
+        }
+      } catch (err) {
+        console.error('Грешка при зареждане на категориите:', err);
+        // Използване на стандартни категории при грешка
+        setCategories(['tools', 'construction', 'machinery', 'other']);
       }
     };
-  };
 
-  const EquipmentModal = ({ equipment, onClose, isEditing, initialData }) => {
-    const [rentalData, setRentalData] = useState(initialData || {
-      startDate: '',
-      endDate: '',
-      message: ''
-    });
+    fetchCategories();
+  }, []);
 
-    const handleSubmit = (e) => {
-      e.preventDefault();
-      if (isEditing) {
-        // Логика за редактиране на съществуваща заявка
-        console.log('Updating rental request:', rentalData);
+  // Преглед на целия API отговор
+  useEffect(() => {
+    // Тест на API свързаността
+    const testApiConnection = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/equipment`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        console.log('API свързаност тест успешен:', res.status);
+      } catch (err) {
+        console.error('API свързаност тест неуспешен:', err);
+      }
+    };
+    
+    testApiConnection();
+  }, []);
+
+  // Функция за зареждане на оборудване - коригирана за правилна структура на данни
+  const fetchEquipment = async (page = 1) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log('Зареждане на оборудване за страница:', page);
+      
+      // Директна заявка без филтри първоначално, за да тестваме
+      const response = await fetch(`${API_URL}/equipment?page=${page}`, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Грешка при зареждане на оборудване: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('Получени данни:', data);
+      
+      if (data.success) {
+        // Коригирана проверка за структурата на данните - вече очакваме data.data да бъде масив
+        if (data.data && Array.isArray(data.data)) {
+          console.log('Брой на получените оборудвания:', data.data.length);
+          if (data.data.length > 0) {
+            console.log('Първо оборудване:', data.data[0]);
+          }
+          
+          setEquipmentList(data.data);
+          setPagination(data.pagination || {
+            page: 1,
+            limit: 10,
+            total: data.data.length,
+            pages: 1
+          });
+        } else {
+          console.error('Невалидна структура на данните:', data);
+          setEquipmentList([]);
+          setError('Грешка в структурата на данните');
+        }
       } else {
-        // Логика за създаване на нова заявка
-        console.log('Creating new rental request:', rentalData);
+        setError(data.error || 'Възникна грешка при зареждане на оборудване');
       }
-      onClose();
-    };
+    } catch (err) {
+      console.error('Грешка при зареждане на оборудване:', err);
+      setError('Възникна грешка при зареждане на оборудване. Моля, опитайте отново.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  // Зареждане на оборудване при първоначално зареждане
+  useEffect(() => {
+    console.log('Компонентът е зареден, изпълняваме fetchEquipment()');
+    fetchEquipment();
+  }, []);
+
+  // Зареждане на оборудване при промяна на филтрите
+  useEffect(() => {
+    // Добавяме дебаунс за филтрите
+    const debounceFilter = setTimeout(() => {
+      fetchEquipment(1);
+    }, 500);
+
+    return () => clearTimeout(debounceFilter);
+  }, [filters]);
+
+  // Функция за изпращане на заявка за наемане
+  const sendRentalRequest = async (e) => {
+    e.preventDefault();
+    
+    if (!user) {
+      setError('Трябва да сте влезли в профила си, за да изпратите заявка за наемане');
+      return;
+    }
+    
+    if (!selectedEquipment) {
+      setError('Не е избрано оборудване за наемане');
+      return;
+    }
+    
+    if (!rentalRequestData.startDate || !rentalRequestData.endDate) {
+      setError('Моля, изберете начална и крайна дата');
+      return;
+    }
+    
+    setLoading(true);
+    
+    try {
+      const token = localStorage.getItem('token');
+      
+      const requestData = {
+        equipment_id: selectedEquipment.id,
+        start_date: rentalRequestData.startDate,
+        end_date: rentalRequestData.endDate,
+        message: rentalRequestData.message
+      };
+      
+      const response = await fetch(`${API_URL}/rentals`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(requestData)
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        alert('Вашата заявка за наемане е изпратена успешно!');
+        setShowRentRequestForm(false);
+        setRentalRequestData({
+          startDate: '',
+          endDate: '',
+          message: ''
+        });
+      } else {
+        setError(data.error || 'Възникна грешка при изпращане на заявката');
+      }
+    } catch (err) {
+      console.error('Грешка при изпращане на заявката:', err);
+      setError('Възникна грешка при изпращане на заявката. Моля, опитайте отново.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Рендериране на списъка с оборудване
+  const renderEquipmentList = () => {
+    console.log('Рендериране на списъка с оборудване:', { loading, error, listLength: equipmentList.length });
+    
+    if (loading) {
+      return (
+        <div className="flex justify-center items-center py-10">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+          <span className="ml-3 text-white">Зареждане...</span>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="bg-red-900 text-white p-4 rounded-md mb-6">
+          <p>Грешка: {error}</p>
+        </div>
+      );
+    }
+
+    if (!equipmentList || equipmentList.length === 0) {
+      return (
+        <div className="bg-gray-800 p-6 rounded-md text-center my-6">
+          <p className="text-gray-300">Не е намерено оборудване, отговарящо на критериите.</p>
+        </div>
+      );
+    }
+
+    // Показваме цялата информация за оборудването
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
-        <div className="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-          <div className="p-6">
-            {/* Галерия */}
-            {equipment.images && equipment.images.length > 0 && (
-              <div className="relative aspect-video bg-gray-900 rounded-lg mb-6">
-                <img
-                  src={equipment.images[currentImageIndex]}
-                  alt={`${equipment.title} - изображение ${currentImageIndex + 1}`}
-                  className="w-full h-full object-contain rounded-lg"
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 my-6">
+        {equipmentList.map((item) => (
+          <div key={item.id} className="bg-gray-800 rounded-lg overflow-hidden shadow-lg">
+            {/* Заглавна снимка */}
+            <div className="h-48 bg-gray-700 flex items-center justify-center">
+              {item.image_url ? (
+                <img 
+                  src={item.image_url} 
+                  alt={item.title} 
+                  className="w-full h-full object-cover"
                 />
-                
-                {/* Бутони за навигация само ако има повече от 1 снимка */}
-                {equipment.images.length > 1 && (
-                  <>
-                    <button
-                      onClick={() => setCurrentImageIndex(prev => 
-                        prev === 0 ? equipment.images.length - 1 : prev - 1
-                      )}
-                      className="absolute left-2 top-1/2 -translate-y-1/2 bg-black bg-opacity-50 text-white p-2 rounded-full hover:bg-opacity-75 transition-all"
-                    >
-                      ←
-                    </button>
-                    <button
-                      onClick={() => setCurrentImageIndex(prev => 
-                        prev === equipment.images.length - 1 ? 0 : prev + 1
-                      )}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-black bg-opacity-50 text-white p-2 rounded-full hover:bg-opacity-75 transition-all"
-                    >
-                      →
-                    </button>
-                  </>
-                )}
-                
-                {/* Индикатори */}
-                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex space-x-2">
-                  {equipment.images.map((_, index) => (
-                    <button
-                      key={index}
-                      onClick={() => setCurrentImageIndex(index)}
-                      className={`w-2 h-2 rounded-full transition-all ${
-                        currentImageIndex === index ? 'bg-white' : 'bg-gray-500'
-                      }`}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Информация */}
-            <div className="space-y-4">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h2 className="text-2xl font-bold text-white mb-2">
-                    {equipment.title}
-                  </h2>
-                  <p className="text-gray-400">
-                    {equipment.description}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <div className="text-xl font-bold text-green-500">
-                    {equipment.price}
-                  </div>
-                  <div className="text-gray-400">
-                    {equipment.location}
-                  </div>
-                </div>
-              </div>
-
-              {/* Спецификации */}
-              {equipment.specifications && (
-                <div className="bg-gray-700 p-4 rounded-lg">
-                  <h3 className="text-lg font-semibold text-white mb-3">
-                    Детайли за заявката
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    {Object.entries(equipment.specifications).map(([key, value]) => (
-                      <div key={key}>
-                        <span className="text-gray-400">{key}: </span>
-                        <span className="text-white">{value}</span>
-                      </div>
-                    ))}
-                  </div>
+              ) : (
+                <div className="text-gray-500 text-center">
+                  <svg className="w-16 h-16 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                  </svg>
+                  <p>Няма снимка</p>
                 </div>
               )}
-
-              {/* Контакти */}
-              <div className="bg-gray-700 p-4 rounded-lg">
-                <h3 className="text-lg font-semibold text-white mb-3">
-                  Контакти
-                </h3>
-                <div className="space-y-2">
-                  <div>
-                    <span className="text-gray-400">Собственик: </span>
-                    <span className="text-white">{equipment.owner}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Телефон: </span>
-                    <span className="text-white">{equipment.contact}</span>
-                  </div>
-                </div>
-              </div>
             </div>
-
-            {/* Форма за наемане/редактиране */}
-            <div className="mt-8 border-t border-gray-700 pt-6">
-              <h3 className="text-xl font-semibold text-white mb-4">
-                {isEditing ? 'Редактирай заявка' : 'Заяви наемане'}
-              </h3>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Начална дата
-                    </label>
-                    <input
-                      type="date"
-                      value={rentalData.startDate}
-                      onChange={(e) => setRentalData(prev => ({ ...prev, startDate: e.target.value }))}
-                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Крайна дата
-                    </label>
-                    <input
-                      type="date"
-                      value={rentalData.endDate}
-                      onChange={(e) => setRentalData(prev => ({ ...prev, endDate: e.target.value }))}
-                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
-                      required
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Съобщение към собственика
-                  </label>
-                  <textarea
-                    value={rentalData.message}
-                    onChange={(e) => setRentalData(prev => ({ ...prev, message: e.target.value }))}
-                    rows="4"
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
-                    required
-                  ></textarea>
-                </div>
-                <div className="flex justify-end space-x-4">
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="px-6 py-2 text-gray-400 hover:text-white transition-colors"
-                  >
-                    Отказ
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-                  >
-                    {isEditing ? 'Запази промените' : 'Изпрати заявка'}
-                  </button>
-                </div>
-              </form>
+            
+            {/* Основна информация */}
+            <div className="p-4">
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="text-xl font-semibold text-white">{item.title}</h3>
+                <span className="text-lg font-bold text-green-400">{item.price} лв/ден</span>
+              </div>
+              
+              <p className="text-gray-400 mb-4 line-clamp-3">{item.description}</p>
+              
+              <div className="flex items-center text-gray-400 mb-2">
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+                <span>{item.location}</span>
+              </div>
+              
+              <div className="flex items-center text-gray-400 mb-2">
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                </svg>
+                <span className="capitalize">{item.category === 'tools' ? 'Инструменти' : 
+                  item.category === 'construction' ? 'Строителни материали' : 
+                  item.category === 'machinery' ? 'Машини' : 'Други'}</span>
+              </div>
+              
+              <div className="flex items-center text-gray-400 mb-4">
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                </svg>
+                <span>Собственик: {item.owner_name || 'Неизвестен'} (ID: {item.user_id})</span>
+              </div>
+              
+              <button
+                onClick={() => {
+                  setSelectedEquipment(item);
+                  setShowRentRequestForm(true);
+                }}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-colors"
+                disabled={!user}
+              >
+                {user ? 'Наеми' : 'Влезте в профила си, за да наемете'}
+              </button>
             </div>
           </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Рендериране на формата за филтриране
+  const renderFilterForm = () => {
+    return (
+      <div className="bg-gray-800 p-4 mb-6 rounded-lg">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Търсене
+            </label>
+            <input
+              type="text"
+              value={filters.search}
+              onChange={(e) => setFilters({...filters, search: e.target.value})}
+              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+              placeholder="Търсете по заглавие..."
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Категория
+            </label>
+            <select
+              value={filters.category}
+              onChange={(e) => setFilters({...filters, category: e.target.value})}
+              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+            >
+              <option value="">Всички категории</option>
+              <option value="tools">Инструменти</option>
+              <option value="construction">Строителни материали</option>
+              <option value="machinery">Машини</option>
+              <option value="other">Други</option>
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Цена от
+            </label>
+            <input
+              type="number"
+              min="0"
+              value={filters.minPrice}
+              onChange={(e) => setFilters({...filters, minPrice: e.target.value})}
+              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+              placeholder="Мин. цена"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Цена до
+            </label>
+            <input
+              type="number"
+              min="0"
+              value={filters.maxPrice}
+              onChange={(e) => setFilters({...filters, maxPrice: e.target.value})}
+              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+              placeholder="Макс. цена"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Локация
+            </label>
+            <input
+              type="text"
+              value={filters.location}
+              onChange={(e) => setFilters({...filters, location: e.target.value})}
+              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+              placeholder="Въведете град..."
+            />
+          </div>
+        </div>
+        
+        <div className="mt-4 flex justify-end">
+          <button
+            onClick={() => setFilters({
+              search: '',
+              category: '',
+              minPrice: '',
+              maxPrice: '',
+              location: ''
+            })}
+            className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
+          >
+            Изчисти филтрите
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // Рендериране на пагинацията
+  const renderPagination = () => {
+    if (!pagination || pagination.pages <= 1) return null;
+
+    // Създаваме масив с номерата на страниците
+    const pageNumbers = [];
+    for (let i = 1; i <= pagination.pages; i++) {
+      pageNumbers.push(i);
+    }
+
+    return (
+      <div className="flex justify-center mt-6">
+        <nav className="flex items-center">
+          <button
+            onClick={() => fetchEquipment(pagination.page - 1)}
+            disabled={pagination.page === 1}
+            className="px-3 py-1 bg-gray-700 text-white rounded-l-md hover:bg-gray-600 transition-colors disabled:opacity-50"
+          >
+            &lt;
+          </button>
+          {pageNumbers.map(page => (
+            <button
+              key={page}
+              onClick={() => fetchEquipment(page)}
+              className={`px-3 py-1 ${pagination.page === page ? 'bg-blue-600' : 'bg-gray-700'} text-white hover:bg-gray-600 transition-colors`}
+            >
+              {page}
+            </button>
+          ))}
+          <button
+            onClick={() => fetchEquipment(pagination.page + 1)}
+            disabled={pagination.page === pagination.pages}
+            className="px-3 py-1 bg-gray-700 text-white rounded-r-md hover:bg-gray-600 transition-colors disabled:opacity-50"
+          >
+            &gt;
+          </button>
+        </nav>
+      </div>
+    );
+  };
+
+  // Модален прозорец за изпращане на заявка за наемане
+  const renderRentRequestModal = () => {
+    if (!showRentRequestForm || !selectedEquipment) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
+        <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
+          <h3 className="text-xl font-semibold mb-4 text-white">
+            Заявка за наемане на "{selectedEquipment.title}"
+          </h3>
+          
+          <form onSubmit={sendRentalRequest}>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Начална дата
+              </label>
+              <input
+                type="date"
+                required
+                min={new Date().toISOString().split('T')[0]}
+                value={rentalRequestData.startDate}
+                onChange={(e) => setRentalRequestData({...rentalRequestData, startDate: e.target.value})}
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+              />
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Крайна дата
+              </label>
+              <input
+                type="date"
+                required
+                min={rentalRequestData.startDate || new Date().toISOString().split('T')[0]}
+                value={rentalRequestData.endDate}
+                onChange={(e) => setRentalRequestData({...rentalRequestData, endDate: e.target.value})}
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+              />
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Съобщение (по желание)
+              </label>
+              <textarea
+                value={rentalRequestData.message}
+                onChange={(e) => setRentalRequestData({...rentalRequestData, message: e.target.value})}
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200 min-h-[100px]"
+                placeholder="Въведете съобщение до наемодателя..."
+              ></textarea>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-gray-300">
+                Обща цена за периода: <span className="font-bold text-green-400">
+                  {selectedEquipment.price * 
+                    (rentalRequestData.startDate && rentalRequestData.endDate ? 
+                      Math.max(1, Math.floor((new Date(rentalRequestData.endDate) - new Date(rentalRequestData.startDate)) / (1000 * 60 * 60 * 24))) : 
+                      0)} лв
+                </span>
+              </p>
+            </div>
+            
+            {error && (
+              <div className="mb-4 text-red-500 text-sm">
+                {error}
+              </div>
+            )}
+            
+            <div className="flex justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRentRequestForm(false);
+                  setRentalRequestData({
+                    startDate: '',
+                    endDate: '',
+                    message: ''
+                  });
+                }}
+                className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
+              >
+                Отказ
+              </button>
+              
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-colors disabled:opacity-50"
+              >
+                {loading ? 'Изпращане...' : 'Изпрати заявка'}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     );
@@ -458,47 +691,47 @@ const EquipmentPage = () => {
             </div>
 
             <div className="space-y-4">
-              {myRequests.map(request => (
-                <div key={request.id} className="bg-gray-700 rounded-lg p-6">
+              {equipmentList.map(equipment => (
+                <div key={equipment.id} className="bg-gray-700 rounded-lg p-6">
                   <div className="flex justify-between items-start">
                     <div>
-                      <h3 className="text-xl font-semibold text-white">{request.equipmentTitle}</h3>
-                      <p className="text-gray-300 mt-1">Собственик: {request.owner}</p>
+                      <h3 className="text-xl font-semibold text-white">{equipment.title}</h3>
+                      <p className="text-gray-300 mt-1">Собственик: {equipment.owner}</p>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-sm font-medium 
-                      ${request.status === 'pending' ? 'bg-yellow-500/20 text-yellow-300' : 
-                        request.status === 'approved' ? 'bg-green-500/20 text-green-300' : 
+                      ${equipment.status === 'pending' ? 'bg-yellow-500/20 text-yellow-300' : 
+                        equipment.status === 'approved' ? 'bg-green-500/20 text-green-300' : 
                         'bg-gray-600 text-gray-300'}`}
                     >
-                      {request.status === 'pending' ? 'В изчакване' : 
-                       request.status === 'approved' ? 'Одобрена' : 'Отказана'}
+                      {equipment.status === 'pending' ? 'В изчакване' : 
+                       equipment.status === 'approved' ? 'Одобрена' : 'Отказана'}
                     </span>
                   </div>
 
                   <div className="mt-4 grid grid-cols-2 gap-4 text-sm text-gray-300">
                     <div>
                       <span className="text-gray-400">От: </span>
-                      {request.startDate}
+                      {equipment.startDate}
                     </div>
                     <div>
                       <span className="text-gray-400">До: </span>
-                      {request.endDate}
+                      {equipment.endDate}
                     </div>
                     <div>
                       <span className="text-gray-400">Обща цена: </span>
-                      {request.totalPrice}
+                      {equipment.totalPrice}
                     </div>
                   </div>
 
                   <div className="mt-4 bg-gray-600/50 p-4 rounded-lg">
-                    <p className="text-gray-300 text-sm">{request.message}</p>
+                    <p className="text-gray-300 text-sm">{equipment.message}</p>
                   </div>
 
                   <div className="mt-4 flex justify-end space-x-4">
                     <button
                       onClick={() => {
                         if (window.confirm('Сигурни ли сте, че искате да изтриете тази заявка?')) {
-                          setMyRequests(prev => prev.filter(r => r.id !== request.id));
+                          setEquipmentList(prev => prev.filter(r => r.id !== equipment.id));
                         }
                       }}
                       className="px-4 py-2 text-red-400 hover:text-red-300 transition-colors"
@@ -507,12 +740,12 @@ const EquipmentPage = () => {
                     </button>
                     <button
                       onClick={() => {
-                        const equipment = findEquipmentByRequest(request);
+                        const equipment = findEquipmentByRequest(equipment);
                         setSelectedEquipment(equipment);
                         setEditingRequest({
-                          startDate: request.startDate,
-                          endDate: request.endDate,
-                          message: request.message
+                          startDate: equipment.startDate,
+                          endDate: equipment.endDate,
+                          message: equipment.message
                         });
                         setShowPublishModal(false);
                         onClose();
@@ -628,60 +861,98 @@ const EquipmentPage = () => {
   };
 
   // Добавяме компонент за публикуване/редактиране на обява
-  const PublishEquipmentModal = ({ equipment, onClose, isEditing }) => {
-    const [formData, setFormData] = useState(
-      equipment ? {
-        id: equipment.id,
-        title: equipment.title,
-        description: equipment.description,
-        price: equipment.price,
-        location: equipment.location,
-        category: equipment.category || 'tools',
-        images: equipment.images || [],
-        owner: equipment.owner,
-        contact: equipment.contact,
-        specifications: equipment.specifications
-      } : {
-        title: '',
-        description: '',
-        price: '',
-        location: '',
-        category: 'tools',
-        images: [],
-        owner: 'Иван Иванов', // Default owner
-        contact: '', // Default contact
-        specifications: {}
-      }
-    );
+  const PublishEquipmentModal = ({ equipment, isEditing, onClose }) => {
+    const [formData, setFormData] = useState({
+      title: equipment?.title || '',
+      description: equipment?.description || '',
+      price: equipment?.price || '',
+      location: equipment?.location || ''
+      // Премахнато е category и images, фокусираме се върху задължителните полета
+    });
+    const [formLoading, setFormLoading] = useState(false);
+    const [formError, setFormError] = useState(null);
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
       e.preventDefault();
-      if (isEditing) {
-        // Логика за редактиране на съществуваща обява
-        console.log('Updating equipment:', formData);
-      } else {
-        // Логика за създаване на нова обява
-        console.log('Creating new equipment:', formData);
+      setFormLoading(true);
+      setFormError(null);
+
+      try {
+        // Валидация на задължителните полета
+        if (!formData.title.trim() || !formData.description.trim() || 
+            !formData.price || !formData.location.trim()) {
+          setFormError('Моля, попълнете всички задължителни полета');
+          setFormLoading(false);
+          return;
+        }
+
+        const payload = {
+          title: formData.title.trim(),
+          description: formData.description.trim(),
+          price: parseFloat(formData.price),
+          location: formData.location.trim()
+        };
+
+        console.log('Изпращане на данни от модала:', JSON.stringify(payload));
+
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setFormError('Необходимо е да сте влезли в профила си');
+          setFormLoading(false);
+          return;
+        }
+
+        const url = isEditing 
+          ? `${API_URL}/equipment/${equipment.id}`
+          : `${API_URL}/equipment`;
+        
+        const method = isEditing ? 'PUT' : 'POST';
+
+        const res = await fetch(url, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        
+        if (data.success) {
+          alert(isEditing ? 'Оборудването е обновено успешно!' : 'Оборудването е публикувано успешно!');
+          onClose();
+        } else {
+          setFormError(data.error || 'Възникна грешка при публикуването');
+        }
+      } catch (err) {
+        console.error('Грешка при публикуване:', err);
+        setFormError('Грешка при изпращане на заявката: ' + err.message);
+      } finally {
+        setFormLoading(false);
       }
-      onClose();
     };
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
-        <div className="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
+        <div className="bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
           <div className="p-6">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-white">
-                {isEditing ? 'Редактиране на обява' : 'Публикуване на обява'}
+              <h2 className="text-2xl font-semibold text-white">
+                {isEditing ? 'Редактирай оборудване' : 'Публикувай ново оборудване'}
               </h2>
-              <button onClick={onClose} className="text-gray-400 hover:text-white">
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+              <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+                ✕
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
+            {formError && (
+              <div className="mb-4 p-3 bg-red-500/30 text-red-200 rounded-md">
+                {formError}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   Заглавие
@@ -693,22 +964,6 @@ const EquipmentPage = () => {
                   className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
                   required
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Категория
-                </label>
-                <select
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
-                >
-                  <option value="tools">Инструменти</option>
-                  <option value="construction">Строително оборудване</option>
-                  <option value="machinery">Машини</option>
-                  <option value="other">Друго</option>
-                </select>
               </div>
 
               <div>
@@ -727,13 +982,14 @@ const EquipmentPage = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Цена (на ден)
+                    Цена на ден (лв.)
                   </label>
                   <input
-                    type="text"
+                    type="number"
                     value={formData.price}
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                     className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+                    min="0"
                     required
                   />
                 </div>
@@ -751,39 +1007,22 @@ const EquipmentPage = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Снимки
-                </label>
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-600 border-dashed rounded-md">
-                  <div className="space-y-1 text-center">
-                    <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    <div className="flex text-sm text-gray-400">
-                      <label className="relative cursor-pointer bg-gray-700 rounded-md font-medium text-white hover:text-gray-200 px-3 py-2">
-                        <span>Качи снимки</span>
-                        <input type="file" multiple className="sr-only" accept="image/*" />
-                      </label>
-                    </div>
-                    <p className="text-xs text-gray-400">PNG, JPG до 10MB</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-4">
+              <div className="flex justify-end space-x-4 mt-6">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
                 >
                   Отказ
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
+                  disabled={formLoading}
+                  className="px-6 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors disabled:opacity-50"
                 >
-                  {isEditing ? 'Запази промените' : 'Публикувай'}
+                  {formLoading 
+                    ? 'Публикуване...' 
+                    : (isEditing ? 'Запази промените' : 'Публикувай')}
                 </button>
               </div>
             </form>
@@ -916,6 +1155,10 @@ const EquipmentPage = () => {
           isEditing={true}
           initialData={editingRequest}
         />
+      )}
+
+      {showRentRequestForm && (
+        renderRentRequestModal()
       )}
     </div>
   );

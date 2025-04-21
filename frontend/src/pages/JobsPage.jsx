@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../config/config';
 import JobApplyModal from '../components/JobApplyModal';
@@ -12,6 +12,9 @@ const JobsPage = () => {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authMessage, setAuthMessage] = useState('');
+  const navigate = useNavigate();
 
   const industries = [
     "IT и Технологии",
@@ -79,6 +82,39 @@ const JobsPage = () => {
     "Друго"
   ];
 
+  // Вземане на токъна от локалното хранилище
+  const token = localStorage.getItem('token');
+
+  // Проверка дали потребителят е автентикиран
+  useEffect(() => {
+    setIsAuthenticated(!!token);
+    // Ако имаме токен, зареждаме запазените обяви
+    if (token) {
+      fetchSavedJobs();
+    }
+  }, [token]);
+
+  // Функция за зареждане на запазените обяви
+  const fetchSavedJobs = async () => {
+    if (!token) return;
+    
+    try {
+      const response = await axios.get(`${API_URL}/saved-jobs`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.data.success) {
+        // Създаваме Set от ID-та на запазените обяви
+        const savedIds = new Set(response.data.data.map(job => job.id || job._id));
+        setSavedJobs(savedIds);
+      }
+    } catch (err) {
+      console.error('Грешка при зареждане на запазени обяви:', err);
+    }
+  };
+
   useEffect(() => {
     const fetchJobs = async () => {
       try {
@@ -111,20 +147,51 @@ const JobsPage = () => {
     e.preventDefault();
     e.stopPropagation();
     
+    // Проверка дали потребителят е логнат
+    if (!token) {
+      setAuthMessage('Трябва да сте влезли в системата, за да запазите обява.');
+      setTimeout(() => setAuthMessage(''), 3000);
+      navigate('/login');
+      return;
+    }
+    
     try {
       if (savedJobs.has(jobId)) {
-        await axios.delete(`${API_URL}/saved-jobs/${jobId}`);
+        // Премахване от запазени
+        await axios.delete(`${API_URL}/saved-jobs/${jobId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
         setSavedJobs(prev => {
           const newSet = new Set(prev);
           newSet.delete(jobId);
           return newSet;
         });
       } else {
-        await axios.post(`${API_URL}/saved-jobs`, { job_id: jobId });
+        // Добавяне към запазени
+        await axios.post(`${API_URL}/saved-jobs`, 
+          { job_id: jobId },
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+        
         setSavedJobs(prev => new Set(prev).add(jobId));
       }
     } catch (error) {
       console.error('Error toggling saved job:', error);
+      if (error.response?.status === 401) {
+        setAuthMessage('Вашата сесия е изтекла. Моля, влезте отново.');
+        setTimeout(() => {
+          localStorage.removeItem('token');
+          navigate('/login');
+        }, 2000);
+      }
     }
   };
 
@@ -135,6 +202,13 @@ const JobsPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800">
+      {/* Съобщение за автентикация */}
+      {authMessage && (
+        <div className="fixed top-5 right-5 bg-yellow-600 text-white px-4 py-2 rounded shadow-lg z-50">
+          {authMessage}
+        </div>
+      )}
+
       <div className="flex-grow">
         <div className="relative max-w-7xl mx-auto px-4 h-[300px] flex items-center">
           <div className="text-white">
