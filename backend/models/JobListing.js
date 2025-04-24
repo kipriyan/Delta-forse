@@ -114,32 +114,53 @@ class JobListing {
 
   static async findById(id) {
     try {
-      // Намиране на обявата с информация за компанията
+      console.log(`Търсене на обява с ID: ${id}, тип: ${typeof id}`);
+      
+      // Преобразуваме ID към число, ако е подаден като string
+      const jobId = parseInt(id, 10);
+      
+      // Debug информация
+      console.log(`Преобразувано ID: ${jobId}, тип: ${typeof jobId}`);
+      
+      // Намиране на обявата с JOIN към компанията за допълнителна информация
       const [jobs] = await pool.execute(`
         SELECT j.*, c.company_name, c.logo_url
         FROM job_listings j
-        INNER JOIN companies c ON j.company_id = c.id
+        LEFT JOIN companies c ON j.company_id = c.id
         WHERE j.id = ?
-      `, [id]);
-
-      if (jobs.length === 0) return null;
-
-      // Намиране на уменията, свързани с обявата
-      const [skills] = await pool.execute(`
-        SELECT s.id, s.name
-        FROM skills s
-        INNER JOIN job_skills js ON s.id = js.skill_id
-        WHERE js.job_id = ?
-      `, [id]);
-
+      `, [jobId]);
+      
+      console.log(`Намерени обяви: ${jobs.length}`);
+      
+      if (jobs.length === 0) {
+        console.log(`Не е намерена обява с ID ${id}`);
+        return null;
+      }
+      
+      // Проверяваме дали skills таблицата съществува преди да опитваме да я използваме
+      let skills = [];
+      try {
+        // Ако имате таблица skills, можете да отремонтирате този коментар
+        /*
+        const [skillsResult] = await pool.execute(`
+          SELECT s.id, s.name
+          FROM skills s
+          INNER JOIN job_skills js ON s.id = js.skill_id
+          WHERE js.job_id = ?
+        `, [jobId]);
+        skills = skillsResult;
+        */
+      } catch (skillsError) {
+        console.log('Таблицата skills или job_skills не съществува, пропускаме зареждането на умения');
+        skills = [];
+      }
+      
+      // Добавяне на уменията към обявата
       jobs[0].skills = skills;
-
-      // Обновяване на броя на прегледите
-      await pool.execute('UPDATE job_listings SET views = views + 1 WHERE id = ?', [id]);
-
+      
       return new JobListing(jobs[0]);
     } catch (error) {
-      console.error('Find job by id error:', error);
+      console.error(`Грешка при търсене на обява по ID ${id}:`, error);
       throw error;
     }
   }
@@ -292,8 +313,30 @@ class JobListing {
 
   static async delete(id) {
     try {
-      await pool.execute('DELETE FROM job_listings WHERE id = ?', [id]);
-      return true;
+      // Първо проверяваме дали съществува обявата
+      const [existingJob] = await pool.execute('SELECT id FROM job_listings WHERE id = ?', [id]);
+      
+      if (existingJob.length === 0) {
+        return { success: false, message: `Не е намерена обява с ID ${id}` };
+      }
+      
+      // Първо изтриваме свързаните умения (foreign keys)
+      await pool.execute('DELETE FROM job_skills WHERE job_id = ?', [id]);
+      
+      // Изтриваме запазените обяви
+      await pool.execute('DELETE FROM saved_jobs WHERE job_id = ?', [id]);
+      
+      // Изтриваме кандидатурите за обявата
+      await pool.execute('DELETE FROM job_applications WHERE job_id = ?', [id]);
+      
+      // Накрая изтриваме самата обява
+      const [result] = await pool.execute('DELETE FROM job_listings WHERE id = ?', [id]);
+      
+      if (result.affectedRows === 0) {
+        return { success: false, message: `Не е изтрита обява с ID ${id}` };
+      }
+      
+      return { success: true };
     } catch (error) {
       console.error('Delete job error:', error);
       throw error;

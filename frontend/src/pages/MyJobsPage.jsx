@@ -25,6 +25,27 @@ const MyJobsPage = () => {
   const [savedJobs, setSavedJobs] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingJob, setEditingJob] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    title: '',
+    location: '',
+    description: '',
+    job_type: '',
+    salary: '',
+    requirements: ''
+  });
+  const [alertModal, setAlertModal] = useState({
+    isOpen: false,
+    message: '',
+    type: 'success' // success, error, warning, info
+  });
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    message: '',
+    onConfirm: null,
+    actionType: 'delete' // delete, cancel, etc.
+  });
 
   useEffect(() => {
     const fetchMyJobs = async () => {
@@ -281,63 +302,107 @@ const MyJobsPage = () => {
   );
 
   const handleEdit = (job) => {
+    // Форматираме данните от обявата към формата, очакван от PublishJobPage
+    const formattedJobData = {
+      id: job.id, // Важно! Запазваме ID на обявата
+      title: job.position || '',
+      company: job.company || '',
+      location: job.location || '',
+      workType: job.type || '',
+      employmentType: job.type === 'full-time' ? 'full-time' : 'part-time',
+      salary: job.salary || '',
+      hourlyRate: job.hourly_rate || '',
+      experience: job.experience_level || '',
+      industry: job.industry || '',
+      description: job.description || '',
+      requirements: job.skills || '',
+      benefits: job.benefits || '',
+      category: job.category || ''
+    };
+
+    // Определяме типа на акаунта за правилно показване на формата
+    const accountType = job.company_id ? 'business' : 'person';
+
+    // Навигираме към страницата за публикуване с данните за редактиране
     navigate('/publish-job', { 
       state: { 
-        isEditing: true,
-        jobData: job
+        isEditing: true, 
+        jobData: formattedJobData,
+        accountType: accountType
       } 
     });
   };
 
-  const handleDelete = async (jobId) => {
-    if (!window.confirm('Сигурни ли сте, че искате да изтриете тази обява?')) {
-      return;
-    }
+  const showConfirm = (message, onConfirm, actionType = 'delete') => {
+    setConfirmModal({
+      isOpen: true,
+      message,
+      onConfirm,
+      actionType
+    });
+  };
 
-    try {
-      const response = await axios.delete(`${API_URL}/jobs/${jobId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
+  const handleDelete = (jobId) => {
+    showConfirm('Сигурни ли сте, че искате да изтриете тази обява?', async () => {
+      try {
+        console.log(`Опит за изтриване на обява с ID: ${jobId}`);
+        
+        const API_URL = 'http://localhost:5000';
+        
+        const response = await axios.delete(`${API_URL}/api/jobs/${jobId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        console.log('Отговор при изтриване:', response.data);
+
+        if (response.data && response.data.success) {
+          // Премахваме изтритата обява от локалния state
+          setJobs(jobs.filter(job => job.id !== jobId));
+          showAlert('Обявата беше успешно изтрита', 'success');
         }
-      });
-
-      if (response.data.success) {
-        setJobs(jobs.filter(job => job.id !== jobId));
-      }
-    } catch (error) {
-      setError('Грешка при изтриване на обявата');
-      console.error('Error deleting job:', error);
-    }
-  };
-
-  // Функция за отваряне на модалния прозорец за изтриване
-  const openDeleteModal = (application) => {
-    setApplicationToDelete(application);
-    setShowDeleteModal(true);
-  };
-
-  // Функция за изтриване на кандидатура
-  const handleDeleteApplication = async () => {
-    if (!applicationToDelete) return;
-    
-    try {
-      const response = await axios.delete(`${API_URL}/profile/applications/${applicationToDelete.id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
+      } catch (error) {
+        console.error('Подробности за грешката при изтриване:', error);
+        console.error('Конфигурация на заявката:', error.config);
+        
+        if (error.response) {
+          console.error('Статус код:', error.response.status);
+          console.error('Данни от отговора:', error.response.data);
         }
-      });
-
-      if (response.data.success) {
-        // Премахваме кандидатурата от списъка
-        setMyApplications(myApplications.filter(app => app.id !== applicationToDelete.id));
-        setShowDeleteModal(false);
+        
+        showAlert(`Грешка при изтриване на обявата: ${error.message}`, 'error');
       }
-    } catch (error) {
-      console.error('Error deleting application:', error);
-    }
+    }, 'delete');
   };
 
-  // Функция за редактиране на кандидатура
+  const handleDeleteApplication = (application) => {
+    showConfirm(
+      `Сигурни ли сте, че искате да оттеглите кандидатурата си за "${application.jobTitle}" в "${application.company}"?`, 
+      async () => {
+        if (!application || !application.id) return;
+        
+        try {
+          const response = await axios.delete(`${API_URL}/profile/applications/${application.id}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+
+          if (response.data.success) {
+            // Премахваме кандидатурата от списъка
+            setMyApplications(myApplications.filter(app => app.id !== application.id));
+            showAlert('Кандидатурата беше успешно оттеглена', 'success');
+          }
+        } catch (error) {
+          console.error('Грешка при изтриване на кандидатура:', error);
+          showAlert(`Грешка при оттегляне на кандидатурата: ${error.response?.data?.error || error.message}`, 'error');
+        }
+      },
+      'withdraw'
+    );
+  };
+
   const handleEditApplication = (application) => {
     console.log("Редактиране на кандидатура, пълни данни:", application);
     setSelectedJob({
@@ -356,42 +421,6 @@ const MyJobsPage = () => {
     setShowApplyModal(true);
   };
 
-  // Компонент за модален прозорец за изтриване
-  const DeleteApplicationModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-gray-800 rounded-lg w-full max-w-md p-6">
-        <div className="text-center mb-6">
-          <div className="bg-red-500/20 p-3 rounded-full inline-flex items-center justify-center mb-4">
-            <svg className="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </div>
-          <h3 className="text-xl font-semibold text-white mb-2">Оттегляне на кандидатура</h3>
-          <p className="text-gray-300">
-            Сигурни ли сте, че искате да оттеглите кандидатурата си за{' '}
-            <span className="font-semibold">{applicationToDelete?.jobTitle}</span> в{' '}
-            <span className="font-semibold">{applicationToDelete?.company}</span>?
-          </p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={() => setShowDeleteModal(false)}
-            className="flex-1 px-4 py-2 bg-gray-700 text-gray-300 rounded-md hover:bg-gray-600 transition-colors"
-          >
-            Отказ
-          </button>
-          <button
-            onClick={handleDeleteApplication}
-            className="flex-1 px-4 py-2 bg-red-500/20 text-red-300 rounded-md hover:bg-red-500/30 transition-colors"
-          >
-            Оттегли
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Коригиран компонент JobApplyModal, за да работи с данните от запазените обяви
   const JobApplyModal = ({ job, onClose, editMode, applicationData, onSubmitSuccess }) => {
     // Добавена проверка и правилно извличане на ID на обявата
     const jobId = job.job_id || job.id;
@@ -614,7 +643,6 @@ const MyJobsPage = () => {
     );
   };
 
-  // Обновена функция за извличане на запазените обяви
   const fetchSavedJobs = async () => {
     setIsLoading(true);
     try {
@@ -655,7 +683,6 @@ const MyJobsPage = () => {
     }
   };
 
-  // Обновена функция за премахване на обява от запазени
   const handleRemoveFromSaved = async (jobId) => {
     try {
       // Коригиран URL според истинския endpoint в бекенда
@@ -669,15 +696,13 @@ const MyJobsPage = () => {
       setSavedJobs(prevSavedJobs => prevSavedJobs.filter(job => job.job_id !== jobId));
       
       // Показваме съобщение за успех
-      setSuccessMessage('Обявата е премахната от запазени успешно');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      showAlert('Обявата е премахната от запазени успешно', 'success');
     } catch (err) {
       console.error('Грешка при премахване от запазени:', err);
-      setError('Не успяхме да премахнем обявата от запазени. Моля, опитайте отново.');
+      showAlert('Не успяхме да премахнем обявата от запазени. Моля, опитайте отново.', 'error');
     }
   };
 
-  // Добавяне на функция за запазване на обява
   const handleSaveJob = async (jobId) => {
     try {
       await axios.post(`${API_URL}/saved-jobs`, 
@@ -696,15 +721,13 @@ const MyJobsPage = () => {
       }
       
       // Показваме съобщение за успех
-      setSuccessMessage('Обявата е запазена успешно');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      showAlert('Обявата е запазена успешно', 'success');
     } catch (err) {
       console.error('Грешка при запазване на обява:', err);
-      setError('Не успяхме да запазим обявата. Моля, опитайте отново.');
+      showAlert('Не успяхме да запазим обявата. Моля, опитайте отново.', 'error');
     }
   };
 
-  // Допълваме съществуващия useEffect, за да зарежда запазените обяви при смяна на таба
   useEffect(() => {
     if (!token) {
       navigate('/login');
@@ -752,6 +775,317 @@ const MyJobsPage = () => {
     }
   }, [activeTab, token, navigate]);
 
+  const handleOpenEditModal = (job) => {
+    setEditingJob(job);
+    setEditFormData({
+      title: job.title || job.position || '',
+      location: job.location || '',
+      description: job.description || '',
+      job_type: job.job_type || job.type || 'full-time',
+      salary: job.salary || '',
+      requirements: job.requirements || job.skills || ''
+    });
+    setShowEditModal(true);
+  };
+
+  const handleEditFormChange = (e) => {
+    const { name, value } = e.target;
+    setEditFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleEditFormSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!editingJob || !editingJob.id) return;
+    
+    try {
+      const API_URL = 'http://localhost:5000';
+      const response = await axios.put(
+        `${API_URL}/api/jobs/${editingJob.id}`,
+        editFormData,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      
+      if (response.data.success) {
+        // Актуализираме локалния state, за да отразим промените
+        setJobs(prevJobs => 
+          prevJobs.map(job => 
+            job.id === editingJob.id ? { ...job, ...editFormData } : job
+          )
+        );
+        
+        // Затваряме модалния прозорец
+        setShowEditModal(false);
+        showAlert('Обявата беше успешно актуализирана!', 'success');
+      }
+    } catch (error) {
+      console.error('Грешка при редактиране на обява:', error);
+      showAlert('Възникна грешка при редактиране на обявата.', 'error');
+    }
+  };
+
+  const EditJobModal = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+      <div className="bg-gray-800 rounded-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+        <div className="p-8">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-white">Редактиране на обява</h2>
+            <button 
+              onClick={() => setShowEditModal(false)} 
+              className="text-gray-400 hover:text-white"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          
+          <form onSubmit={handleEditFormSubmit} className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Заглавие на обявата
+              </label>
+              <input
+                type="text"
+                name="title"
+                value={editFormData.title}
+                onChange={handleEditFormChange}
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Локация
+              </label>
+              <input
+                type="text"
+                name="location"
+                value={editFormData.location}
+                onChange={handleEditFormChange}
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Тип работа
+              </label>
+              <select
+                name="job_type"
+                value={editFormData.job_type}
+                onChange={handleEditFormChange}
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+              >
+                <option value="full-time">Пълен работен ден</option>
+                <option value="part-time">Непълен работен ден</option>
+                <option value="remote">Дистанционна работа</option>
+                <option value="contract">Договор</option>
+                <option value="internship">Стаж</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Заплата
+              </label>
+              <input
+                type="text"
+                name="salary"
+                value={editFormData.salary}
+                onChange={handleEditFormChange}
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+                placeholder="напр. 2000-3000 лв."
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Изисквания
+              </label>
+              <textarea
+                name="requirements"
+                value={editFormData.requirements}
+                onChange={handleEditFormChange}
+                rows="3"
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+              ></textarea>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Описание
+              </label>
+              <textarea
+                name="description"
+                value={editFormData.description}
+                onChange={handleEditFormChange}
+                rows="6"
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+                required
+              ></textarea>
+            </div>
+            
+            <div className="flex justify-end space-x-4 pt-4">
+              <button
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                className="px-6 py-2 bg-gray-700 text-gray-300 rounded-md hover:bg-gray-600"
+              >
+                Отказ
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Запази промените
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+
+  const showAlert = (message, type = 'success') => {
+    setAlertModal({
+      isOpen: true,
+      message,
+      type
+    });
+    
+    if (type === 'success') {
+      setTimeout(() => {
+        setAlertModal(prev => ({ ...prev, isOpen: false }));
+      }, 3000);
+    }
+  };
+
+  const AlertModal = () => {
+    if (!alertModal.isOpen) return null;
+    
+    const getColors = () => {
+      switch(alertModal.type) {
+        case 'success':
+          return 'bg-green-700/90 border-green-500';
+        case 'error':
+          return 'bg-red-700/90 border-red-500';
+        case 'warning':
+          return 'bg-yellow-700/90 border-yellow-500';
+        case 'info':
+          return 'bg-blue-700/90 border-blue-500';
+        default:
+          return 'bg-gray-700/90 border-gray-500';
+      }
+    };
+    
+    return (
+      <div className="fixed inset-0 flex items-center justify-center z-50">
+        <div className="absolute inset-0 bg-black/50" onClick={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}></div>
+        <div className={`relative px-6 py-4 rounded-lg shadow-lg border-2 ${getColors()} max-w-md w-full mx-4`}>
+          <div className="flex justify-between items-start">
+            <div className="text-white text-lg font-medium">
+              {alertModal.type === 'success' && 'Успех!'}
+              {alertModal.type === 'error' && 'Грешка!'}
+              {alertModal.type === 'warning' && 'Внимание!'}
+              {alertModal.type === 'info' && 'Информация'}
+            </div>
+            <button 
+              onClick={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+              className="text-white hover:text-gray-300 transition-colors"
+            >
+              &times;
+            </button>
+          </div>
+          <div className="mt-2 text-white">{alertModal.message}</div>
+          {alertModal.type !== 'success' && (
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-colors"
+              >
+                Затвори
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const ConfirmModal = () => {
+    if (!confirmModal.isOpen) return null;
+    
+    const getActionDetails = () => {
+      switch(confirmModal.actionType) {
+        case 'delete':
+          return {
+            title: 'Потвърждение за изтриване',
+            buttonText: 'Изтрий',
+            buttonClass: 'bg-red-600 hover:bg-red-700'
+          };
+        case 'withdraw':
+          return {
+            title: 'Потвърждение за оттегляне',
+            buttonText: 'Оттегли',
+            buttonClass: 'bg-yellow-600 hover:bg-yellow-700'
+          };
+        default:
+          return {
+            title: 'Потвърждение',
+            buttonText: 'Потвърди',
+            buttonClass: 'bg-blue-600 hover:bg-blue-700'
+          };
+      }
+    };
+    
+    const actionDetails = getActionDetails();
+    
+    return (
+      <div className="fixed inset-0 flex items-center justify-center z-50">
+        <div className="absolute inset-0 bg-black/50" onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}></div>
+        <div className="relative bg-gray-800 border border-gray-700 px-6 py-4 rounded-lg shadow-lg max-w-md w-full mx-4">
+          <div className="text-white text-lg font-medium mb-4">{actionDetails.title}</div>
+          <div className="mt-2 text-gray-300">{confirmModal.message}</div>
+          <div className="mt-6 flex justify-end space-x-4">
+            <button
+              onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+              className="px-4 py-2 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors"
+            >
+              Отмени
+            </button>
+            <button
+              onClick={() => {
+                if (confirmModal.onConfirm) {
+                  confirmModal.onConfirm();
+                }
+                setConfirmModal(prev => ({ ...prev, isOpen: false }));
+              }}
+              className={`px-4 py-2 ${actionDetails.buttonClass} text-white rounded transition-colors`}
+            >
+              {actionDetails.buttonText}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const openDeleteModal = (application) => {
+    handleDeleteApplication(application);
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-900 to-gray-800">
       <div className="flex-grow">
@@ -767,7 +1101,6 @@ const MyJobsPage = () => {
         </div>
 
         <div className="max-w-7xl mx-auto px-4">
-          {/* Табове */}
           <div className="flex space-x-4 mb-6">
             <button
               className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -801,7 +1134,6 @@ const MyJobsPage = () => {
             </button>
           </div>
 
-          {/* Списък с обяви */}
           {activeTab === 'applications' && (
             <div className="space-y-4">
               {jobs.map(job => (
@@ -821,12 +1153,10 @@ const MyJobsPage = () => {
                          job.status === 'approved' ? 'Одобрена' : 'Нова'}
                       </span>
                       <button
-                        onClick={() => handleEdit(job)}
-                        className="text-blue-400 hover:text-blue-300 transition-colors"
+                        onClick={() => handleOpenEditModal(job)}
+                        className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 mr-2"
                       >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
+                        Редактирай
                       </button>
                       <button
                         onClick={() => handleDelete(job.id)}
@@ -863,7 +1193,6 @@ const MyJobsPage = () => {
             </div>
           )}
 
-          {/* Списък със запазени обяви */}
           {activeTab === 'saved' && (
             <div className="space-y-4">
               {savedJobs.length === 0 ? (
@@ -910,7 +1239,6 @@ const MyJobsPage = () => {
             </div>
           )}
 
-          {/* Списък с моите кандидатури */}
           {activeTab === 'my-applications' && (
             <div className="space-y-6">
               {loadingMyApplications ? (
@@ -941,7 +1269,7 @@ const MyJobsPage = () => {
                           {application.status}
                         </span>
                         <button
-                          onClick={() => openDeleteModal(application)}
+                          onClick={() => handleDeleteApplication(application)}
                           className="text-red-400 hover:text-red-300 transition-colors p-1"
                           title="Оттегли кандидатурата"
                         >
@@ -988,7 +1316,6 @@ const MyJobsPage = () => {
                           </a>
                         )}
                         
-                        {/* Показвай бутона за редактиране само за кандидатури със статус "Разглежда се" */}
                         {application.status === 'Разглежда се' && (
                           <button 
                             className="text-blue-400 hover:text-blue-300 transition-colors"
@@ -1007,7 +1334,6 @@ const MyJobsPage = () => {
         </div>
       </div>
 
-      {/* Модален прозорец за кандидатурите */}
       {showApplicationsModal && selectedJob && activeTab === 'applications' && (
         <ApplicationsModal
           applications={selectedJobApplications}
@@ -1018,10 +1344,8 @@ const MyJobsPage = () => {
         />
       )}
 
-      {/* Модален прозорец за изтриване */}
-      {showDeleteModal && <DeleteApplicationModal />}
+      {showDeleteModal && <ConfirmModal />}
       
-      {/* Модален прозорец за кандидатстване/редактиране */}
       {showApplyModal && (
         <JobApplyModal
           job={selectedJob}
@@ -1033,7 +1357,6 @@ const MyJobsPage = () => {
           applicationData={editingApplication}
           onSubmitSuccess={(updatedApplication) => {
             if (editingApplication) {
-              // Актуализираме списъка с кандидатури след редактиране
               fetchMyApplications();
             }
             setShowApplyModal(false);
@@ -1041,6 +1364,12 @@ const MyJobsPage = () => {
           }}
         />
       )}
+
+      {showEditModal && <EditJobModal />}
+
+      <AlertModal />
+
+      {confirmModal.isOpen && <ConfirmModal />}
     </div>
   );
 };

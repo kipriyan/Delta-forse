@@ -7,8 +7,7 @@ const Navbar = () => {
   const { user, logout } = useAuth();
 
   const navLinks = [
-    { to: "/jobs", text: "ОБЯВИ" },
-    { to: "/companies", text: "КОМПАНИИ" },
+    { to: "/jobs", text: "ОБЯВИ" },,
     { to: "/my-jobs", text: "МОИТЕ ОБЯВИ" },
     { to: "/equipment", text: "ЕКИПИРОВКА" },
   ];

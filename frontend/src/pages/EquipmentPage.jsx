@@ -60,6 +60,18 @@ const EquipmentPage = () => {
   const [editingApplicationId, setEditingApplicationId] = useState(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [myApplications, setMyApplications] = useState([]);
+  const [alertModal, setAlertModal] = useState({
+    isOpen: false,
+    message: '',
+    type: 'success' // success, error, warning, info
+  });
+  // Добавяме състояние за модалния прозорец за потвърждение
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    message: '',
+    onConfirm: null,
+    actionType: 'delete' // delete, cancel, etc.
+  });
 
   // Логваме информация за потребителя от AuthContext
   useEffect(() => {
@@ -172,7 +184,7 @@ const EquipmentPage = () => {
       // Проверка за валиден токен
       const token = localStorage.getItem('token');
       if (!token) {
-        alert('Трябва да влезете в профила си, за да направите заявка');
+        showAlert('Трябва да влезете в профила си, за да направите заявка', 'warning');
         return;
       }
       
@@ -198,7 +210,7 @@ const EquipmentPage = () => {
       );
       
       if (response.data.success) {
-        alert('Заявката за наем е изпратена успешно!');
+        showAlert('Заявката за наем е изпратена успешно!', 'success');
         setShowInfoModal(false);
         setSelectedEquipment(null);
         setRentalRequestData({
@@ -207,12 +219,12 @@ const EquipmentPage = () => {
           message: ''
         });
       } else {
-        alert(`Грешка: ${response.data.error}`);
+        showAlert(`Грешка: ${response.data.error}`, 'error');
       }
     } catch (error) {
       console.error('Грешка при изпращане на заявка:', error);
       console.error('Детайли за грешката:', error.response?.data);
-      alert(`Грешка при изпращане на заявката: ${error.response?.data?.error || error.message}`);
+      showAlert(`Грешка при изпращане на заявката: ${error.response?.data?.error || error.message}`, 'error');
     } finally {
       setFormSubmitting(false);
     }
@@ -493,7 +505,7 @@ const EquipmentPage = () => {
       // Проверка за валиден токен
       const token = localStorage.getItem('token');
       if (!token) {
-        alert('Трябва да влезете в профила си, за да направите заявка');
+        showAlert('Трябва да влезете в профила си, за да направите заявка', 'warning');
         return;
       }
       
@@ -517,7 +529,7 @@ const EquipmentPage = () => {
       );
       
       if (response.data.success) {
-        alert('Заявката за наем е изпратена успешно!');
+        showAlert('Заявката за наем е изпратена успешно!', 'success');
         setShowInfoModal(false);
         setSelectedEquipment(null);
         setRentalRequestData({
@@ -526,11 +538,11 @@ const EquipmentPage = () => {
           message: ''
         });
       } else {
-        alert(`Грешка: ${response.data.error}`);
+        showAlert(`Грешка: ${response.data.error}`, 'error');
       }
     } catch (error) {
       console.error('Грешка при изпращане на заявка:', error);
-      alert(`Грешка при изпращане на заявката: ${error.response?.data?.error || error.message}`);
+      showAlert(`Грешка при изпращане на заявката: ${error.response?.data?.error || error.message}`, 'error');
     } finally {
       setFormSubmitting(false);
     }
@@ -695,66 +707,42 @@ const EquipmentPage = () => {
     setShowMyListings(false); // Затваряме списъка с обяви
   };
 
-  // Поправяме функцията за зареждане на собствени обяви - премахваме ограничението до 2 елемента
+  // Функция за зареждане на моите обяви за оборудване
   const fetchMyEquipment = async () => {
-    if (!user) {
-      console.error('Потребителят не е влязъл в профила си');
-      return;
-    }
-    
-    console.log('Зареждане на собствени обяви, ID на потребителя:', user.id);
-    setIsLoadingMyEquipment(true);
-    
     try {
-      // Зареждаме всички обяви
-      const response = await axios.get(`${API_URL}/equipment`);
+      setIsLoadingMyEquipment(true);
+      setMyEquipmentError(null);
       
-      if (response.data && Array.isArray(response.data.data)) {
-        const allEquipment = response.data.data;
-        console.log('Всички обяви:', allEquipment);
-        
-        // Подобрена логика за филтриране с множество проверки
-        const userEquipment = allEquipment.filter(item => {
-          // Проверка за различни възможни формати на owner
-          const itemOwnerId = 
-            (item.owner && typeof item.owner === 'object' && item.owner.id) 
-              ? String(item.owner.id)
-              : (item.owner !== undefined && item.owner !== null) 
-                ? String(item.owner) 
-                : (item.ownerId !== undefined) 
-                  ? String(item.ownerId)
-                  : null;
-                  
-          const userId = String(user.id);
-          return itemOwnerId === userId;
-        });
-        
-        console.log('Филтрирани обяви за текущия потребител:', userEquipment);
-        
-        // Ако не можем да намерим обяви, опитваме алтернативни филтри
-        if (userEquipment.length === 0) {
-          console.log('Не бяха намерени обяви чрез директно филтриране, показваме всички обяви');
-          // Премахваме ограничението до 2 елемента
-          setMyEquipment(allEquipment); // Показваме всички обяви
-        } else {
-          setMyEquipment(userEquipment); // Показваме всички обяви на потребителя
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Необходима е автентикация');
+      }
+      
+      // Променяме URL-а, за да извлечем само обявите на текущия потребител
+      const response = await axios.get(`${API_URL}/equipment/my`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
+      });
+      
+      if (response.data.success) {
+        console.log('Извлечени мои обяви:', response.data.data);
+        setMyEquipment(response.data.data || []);
       } else {
-        console.warn('Неочакван формат на отговора, няма data масив:', response.data);
-        setMyEquipment([]);
+        throw new Error(response.data.error || 'Грешка при зареждане на моите обяви');
       }
     } catch (error) {
-      console.error('Грешка при зареждане на обяви:', error);
-      setMyEquipmentError(`Възникна грешка при зареждане на обявите: ${error.message}`);
+      console.error('Грешка при зареждане на моите обяви:', error);
+      setMyEquipmentError(error.message || 'Възникна грешка при зареждане');
     } finally {
       setIsLoadingMyEquipment(false);
     }
   };
 
-  // Добавяме обработка за бутона "Виж моите обяви"
+  // Функция за показване на модалния прозорец за моите обяви
   const handleViewMyListings = () => {
     setShowMyListings(true);
-    fetchMyEquipment(); // Извикваме зареждането при натискане на бутона
+    fetchMyEquipment(); // Зареждаме моите обяви при отваряне на модала
   };
 
   // Актуализираме функцията за обработка на заявките
@@ -777,13 +765,13 @@ const EquipmentPage = () => {
       fetchMyEquipment();
       
       // Показваме съобщение за успех
-      alert(action === 'approve' ? 
+      showAlert(action === 'approve' ? 
         'Заявката за наем беше одобрена успешно!' : 
-        'Заявката за наем беше отхвърлена успешно!');
+        'Заявката за наем беше отхвърлена успешно!', 'success');
         
     } catch (err) {
       console.error(`Грешка при ${action} на заявка:`, err);
-      alert(`Възникна грешка: ${err.response?.data?.message || err.message}`);
+      showAlert(`Възникна грешка: ${err.response?.data?.message || err.message}`, 'error');
     }
   };
 
@@ -886,9 +874,46 @@ const EquipmentPage = () => {
                           </button>
                           <button
                             onClick={() => {
-                              if (window.confirm('Сигурни ли сте, че искате да изтриете тази обява?')) {
-                                deleteEquipment(equipment.id);
-                              }
+                              // Вместо директно изтриване, първо показваме потвърждение
+                              showConfirm(
+                                'Сигурни ли сте, че искате да изтриете тази обява?', 
+                                async () => {
+                                  // Код за изтриване след потвърждение
+                                  try {
+                                    // Проверка за токен
+                                    if (!token) {
+                                      console.error('Не е намерен валиден токен за аутентикация');
+                                      showAlert('За да изтриете обява, трябва да влезете в профила си. Моля, презаредете страницата или влезте отново.', 'warning');
+                                      return;
+                                    }
+
+                                    const response = await axios.delete(`${API_URL}/api/equipment/${equipment.id}`, {
+                                      headers: { Authorization: `Bearer ${token}` }
+                                    });
+                                    
+                                    if (response.data.success) {
+                                      // Актуализираме списъка с оборудване
+                                      setMyEquipment(prev => prev.filter(equip => equip.id !== equipment.id));
+                                      showAlert('Обявата беше изтрита успешно!', 'success');
+                                    }
+                                  } catch (error) {
+                                    console.error('Грешка при изтриване на оборудване:', error);
+                                    
+                                    let errorMessage = 'Възникна грешка при изтриване на обявата.';
+                                    
+                                    if (error.response) {
+                                      if (error.response.status === 401) {
+                                        errorMessage = 'Вашата сесия е изтекла. Моля, влезте отново в профила си, за да изтриете обявата.';
+                                      } else if (error.response.data && error.response.data.error) {
+                                        errorMessage = error.response.data.error;
+                                      }
+                                    }
+                                    
+                                    showAlert(errorMessage, 'error');
+                                  }
+                                },
+                                'delete'
+                              );
                             }}
                             className="p-2 bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 transition-colors"
                             title="Изтрий обявата"
@@ -1088,7 +1113,7 @@ const EquipmentPage = () => {
                         Редактирай
                       </button>
                       <button 
-                        onClick={() => deleteApplication(application.id)}
+                        onClick={() => cancelRentalRequest(application.id)}
                         className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
                       >
                         Откажи
@@ -1271,7 +1296,7 @@ const EquipmentPage = () => {
         const data = await res.json();
         
         if (data.success) {
-          alert(isEditing ? 'Оборудването е обновено успешно!' : 'Оборудването е публикувано успешно!');
+          showAlert(isEditing ? 'Оборудването е обновено успешно!' : 'Оборудването е публикувано успешно!', 'success');
           onClose();
         } else {
           setFormError(data.error || 'Възникна грешка при публикуването');
@@ -1383,223 +1408,109 @@ const EquipmentPage = () => {
     );
   };
 
-  // Подобрена функция за изтриване на обява с по-добра проверка на потребителя
-  const deleteEquipment = async (equipmentId) => {
-    // Подробно логване на състоянието на потребителя
-    console.log('Опит за изтриване на обява, състояние на потребителя:', {
-      userExists: !!user,
-      userDetails: user ? {
-        id: user.id,
-        name: user.name,
-        hasToken: !!user.token,
-        tokenLength: user.token ? user.token.length : 0
-      } : 'няма потребител'
+  // Функция за показване на диалог за потвърждение
+  const showConfirm = (message, onConfirm, actionType = 'delete') => {
+    setConfirmModal({
+      isOpen: true,
+      message,
+      onConfirm,
+      actionType
     });
-    
-    // Получаване на токена по различни начини за сигурност
-    const token = user?.token || localStorage.getItem('token') || sessionStorage.getItem('token');
-    
-    if (!token) {
-      console.error('Не е намерен валиден токен за аутентикация');
-      alert('За да изтриете обява, трябва да влезете в профила си. Моля, презаредете страницата или влезте отново.');
-      return;
-    }
-    
-    try {
-      console.log('Изпращане на заявка за изтриване на обява с ID:', equipmentId);
-      
-      // Използваме получения токен вместо да разчитаме само на user.token
-      const response = await axios.delete(`${API_URL}/equipment/${equipmentId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      console.log('Отговор при изтриване на обява:', response.data);
-      
-      // Проверка дали изтриването е успешно
-      if (response.status === 200 || response.status === 204) {
-        // Актуализираме локалния state, премахвайки изтритата обява
-        setMyEquipment(prev => prev.filter(item => item.id !== equipmentId));
-        
-        // Актуализираме и списъка с всички обяви, ако съществува
-        if (typeof setEquipment === 'function') {
-          setEquipment(prev => prev.filter(item => item.id !== equipmentId));
-        }
-        
-        // Показваме съобщение за успех
-        alert('Обявата беше изтрита успешно!');
-      } else {
-        throw new Error('Неуспешно изтриване на обява');
-      }
-    } catch (error) {
-      console.error('Грешка при изтриване на обява:', error);
-      
-      // Проверка за специфични грешки с аутентикацията
-      if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-        alert('Вашата сесия е изтекла. Моля, влезте отново в профила си, за да изтриете обявата.');
-        // Тук може да добавите логика за автоматично пренасочване към страницата за вход
-      } else {
-        // Общо съобщение за други грешки
-        let errorMessage = 'Възникна грешка при изтриване на обявата.';
-        
-        if (error.response?.data?.message) {
-          errorMessage += ` ${error.response.data.message}`;
-        } else if (error.message) {
-          errorMessage += ` ${error.message}`;
-        }
-        
-        alert(errorMessage);
-      }
-    }
   };
 
-  // Добавяне на функция за изтриване на заявка без промяна на дизайна
-  const deleteApplication = async (id) => {
-    if (!window.confirm('Сигурни ли сте, че искате да откажете тази заявка?')) return;
-    
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        alert('Необходима е автентикация');
-        return;
-      }
-      
-      console.log('Изпращане на заявка за изтриване на заявка с ID:', id);
-      
-      // Коригиран URL - използваме equipment-rentals вместо applications
-      const response = await axios.delete(`${API_URL}/equipment-rentals/${id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      console.log('Отговор при изтриване на заявка:', response.data);
-      
-      if (response.data.success) {
-        // Обновяваме глобалния списък със заявки, ако има такъв
-        if (typeof setMyApplications === 'function') {
-          setMyApplications(prevApplications => 
-            prevApplications.filter(app => app.id !== id)
+  // В метода за отказване на заявка за наем
+  const cancelRentalRequest = async (requestId) => {
+    showConfirm(
+      'Сигурни ли сте, че искате да отмените тази заявка?', 
+      async () => {
+        try {
+          const response = await axios.put(
+            `${API_URL}/api/equipment/requests/${requestId}/cancel`,
+            {},
+            {
+              headers: { Authorization: `Bearer ${token}` }
+            }
           );
+          
+          if (response.data.success) {
+            // Актуализираме списъка със заявки
+            setMyApplications(prev => 
+              prev.map(app => 
+                app.id === requestId 
+                  ? { ...app, status: 'cancelled' } 
+                  : app
+              )
+            );
+            
+            showAlert('Заявката беше успешно отказана!', 'success');
+          }
+        } catch (error) {
+          console.error('Грешка при отказване на заявка:', error);
+          showAlert(`Грешка при отказване на заявката: ${error.response?.data?.error || error.message}`, 'error');
         }
-        
-        alert('Заявката беше успешно отказана!');
-        
-        // Затваряме модалния прозорец, ако е необходимо (ако функцията е достъпна)
-        if (typeof onRequestModalClose === 'function') {
-          onRequestModalClose();
-        }
-      } else {
-        throw new Error(response.data.error || 'Възникна грешка при отказа на заявката');
-      }
-    } catch (error) {
-      console.error('Грешка при изтриване на заявка:', error);
-      alert(`Грешка при отказване на заявката: ${error.response?.data?.error || error.message}`);
-    }
+      },
+      'cancel'
+    );
   };
 
-  // Функция за отваряне на формата за редактиране
-  const openEditForm = (application) => {
-    // Уверете се, че application и application.id са валидни
-    if (!application || !application.id) {
-      console.error('Невалидна заявка за редактиране:', application);
-      return;
-    }
+  // Компонент за модалния прозорец за потвърждение
+  const ConfirmModal = () => {
+    if (!confirmModal.isOpen) return null;
     
-    console.log('Отваряне на форма за редактиране на заявка:', application);
-    
-    // Форматиране на датите правилно (YYYY-MM-DD)
-    const formatDate = (dateString) => {
-      const date = new Date(dateString);
-      return date.toISOString().split('T')[0];
+    // Определяме текста и стила според типа действие
+    const getActionDetails = () => {
+      switch(confirmModal.actionType) {
+        case 'delete':
+          return {
+            title: 'Потвърждение за изтриване',
+            buttonText: 'Изтрий',
+            buttonClass: 'bg-red-600 hover:bg-red-700'
+          };
+        case 'cancel':
+          return {
+            title: 'Потвърждение за отказ',
+            buttonText: 'Откажи заявката',
+            buttonClass: 'bg-yellow-600 hover:bg-yellow-700'
+          };
+        default:
+          return {
+            title: 'Потвърждение',
+            buttonText: 'Потвърди',
+            buttonClass: 'bg-blue-600 hover:bg-blue-700'
+          };
+      }
     };
     
-    setEditFormData({
-      startDate: application.start_date ? formatDate(application.start_date) : '',
-      endDate: application.end_date ? formatDate(application.end_date) : '',
-      message: application.message || ''
-    });
+    const actionDetails = getActionDetails();
     
-    // Запазване на ID на заявката
-    setEditingApplicationId(application.id);
-  };
-
-  // Функция за затваряне на формата
-  const closeEditForm = () => {
-    setEditingApplicationId(null);
-    setEditFormData({
-      startDate: '',
-      endDate: '',
-      message: ''
-    });
-  };
-
-  // Функция за обработка на промените във формата
-  const handleEditFormChange = (e) => {
-    const { name, value } = e.target;
-    setEditFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  // Функция за изпращане на редактираните данни
-  const submitEditForm = async (e) => {
-    e.preventDefault();
-    try {
-      console.log(`Изпращане на заявка за редактиране на заявка с ID: ${editingApplicationId}`);
-      
-      // Проверка дали ID на заявката е валидно
-      if (!editingApplicationId) {
-        console.error('Липсва ID на заявката за редактиране');
-        alert('Грешка: Не може да се идентифицира заявката за редактиране');
-        return;
-      }
-      
-      // Форматиране на данните за изпращане към API
-      const formattedData = {
-        start_date: editFormData.startDate,
-        end_date: editFormData.endDate,
-        message: editFormData.message
-      };
-      
-      console.log('Данни за изпращане:', formattedData);
-      
-      // Използваме правилния API маршрут за редактиране на заявка за наем
-      const response = await axios.put(
-        `${API_URL}/equipment-rentals/${editingApplicationId}`,
-        formattedData,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        }
-      );
-      
-      console.log('Отговор от сървъра след редактиране:', response.data);
-      
-      if (response.data.success) {
-        alert('Заявката е успешно редактирана');
-        closeEditForm();
-        
-        // Обновяваме локално заявката в списъка, вместо да зареждаме отново всички
-        if (response.data.data) {
-          setMyApplications(prevApplications => 
-            prevApplications.map(app => 
-              app.id === editingApplicationId ? response.data.data : app
-            )
-          );
-        }
-      } else {
-        alert(`Грешка при редактиране на заявката: ${response.data.error}`);
-      }
-    } catch (error) {
-      console.error('Грешка при редактиране на заявката:', error);
-      console.error('Детайли за грешката:', error.response?.data);
-      alert(`Грешка при редактиране: ${error.response?.data?.error || error.message}`);
-    }
+    return (
+      <div className="fixed inset-0 flex items-center justify-center z-50">
+        <div className="absolute inset-0 bg-black/50" onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}></div>
+        <div className="relative bg-gray-800 border border-gray-700 px-6 py-4 rounded-lg shadow-lg max-w-md w-full mx-4">
+          <div className="text-white text-lg font-medium mb-4">{actionDetails.title}</div>
+          <div className="mt-2 text-gray-300">{confirmModal.message}</div>
+          <div className="mt-6 flex justify-end space-x-4">
+            <button
+              onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+              className="px-4 py-2 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors"
+            >
+              Отмени
+            </button>
+            <button
+              onClick={() => {
+                if (confirmModal.onConfirm) {
+                  confirmModal.onConfirm();
+                }
+                setConfirmModal(prev => ({ ...prev, isOpen: false }));
+              }}
+              className={`px-4 py-2 ${actionDetails.buttonClass} text-white rounded transition-colors`}
+            >
+              {actionDetails.buttonText}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   // Функция за намиране на оборудване по заявка
@@ -1632,6 +1543,76 @@ const EquipmentPage = () => {
     
     console.log('Намерено ID на оборудване:', equipmentId);
     return equipmentId;
+  };
+
+  // Функция за показване на съобщение
+  const showAlert = (message, type = 'success') => {
+    setAlertModal({
+      isOpen: true,
+      message,
+      type
+    });
+    
+    // Автоматично затваряне след 3 секунди за успешни съобщения
+    if (type === 'success') {
+      setTimeout(() => {
+        setAlertModal(prev => ({ ...prev, isOpen: false }));
+      }, 3000);
+    }
+  };
+
+  // Компонент за модалния прозорец за известия
+  const AlertModal = () => {
+    if (!alertModal.isOpen) return null;
+    
+    // Определяме цветовете според типа на съобщението
+    const getColors = () => {
+      switch(alertModal.type) {
+        case 'success':
+          return 'bg-green-700/90 border-green-500';
+        case 'error':
+          return 'bg-red-700/90 border-red-500';
+        case 'warning':
+          return 'bg-yellow-700/90 border-yellow-500';
+        case 'info':
+          return 'bg-blue-700/90 border-blue-500';
+        default:
+          return 'bg-gray-700/90 border-gray-500';
+      }
+    };
+    
+    return (
+      <div className="fixed inset-0 flex items-center justify-center z-50">
+        <div className="absolute inset-0 bg-black/50" onClick={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}></div>
+        <div className={`relative px-6 py-4 rounded-lg shadow-lg border-2 ${getColors()} max-w-md w-full mx-4`}>
+          <div className="flex justify-between items-start">
+            <div className="text-white text-lg font-medium">
+              {alertModal.type === 'success' && 'Успех!'}
+              {alertModal.type === 'error' && 'Грешка!'}
+              {alertModal.type === 'warning' && 'Внимание!'}
+              {alertModal.type === 'info' && 'Информация'}
+            </div>
+            <button 
+              onClick={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+              className="text-white hover:text-gray-300 transition-colors"
+            >
+              &times;
+            </button>
+          </div>
+          <div className="mt-2 text-white">{alertModal.message}</div>
+          {alertModal.type !== 'success' && (
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-colors"
+              >
+                Затвори
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -1849,6 +1830,8 @@ const EquipmentPage = () => {
           </div>
         </div>
       )}
+      <AlertModal />
+      {confirmModal.isOpen && <ConfirmModal />}
     </div>
   );
 };

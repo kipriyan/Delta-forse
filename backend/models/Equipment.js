@@ -242,12 +242,12 @@ class Equipment {
     }
   }
 
-  // Получаване на екипировка, принадлежаща на определен потребител
-  static async findByUserId(userId, page = 1, limit = 10) {
+  // Намира оборудване по потребителски ID
+  static async findByUserId(userId) {
     try {
-      const offset = (page - 1) * limit;
+      console.log(`Търсене на оборудване за потребител с ID: ${userId}`);
       
-      const [equipment] = await pool.execute(`
+      const [rows] = await pool.execute(`
         SELECT e.*, u.first_name, u.last_name, u.email,
           CONCAT(u.first_name, ' ', u.last_name) as owner_name, 
           u.email as owner_email
@@ -255,27 +255,11 @@ class Equipment {
         LEFT JOIN users u ON e.user_id = u.id
         WHERE e.user_id = ?
         ORDER BY e.created_at DESC
-        LIMIT ? OFFSET ?
-      `, [userId, parseInt(limit), parseInt(offset)]);
+      `, [userId]);
       
-      const [countResult] = await pool.execute(
-        'SELECT COUNT(*) as total FROM equipment WHERE user_id = ?',
-        [userId]
-      );
-      
-      const total = countResult[0].total;
-      
-      return {
-        equipment: equipment.map(item => new Equipment(item)),
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.ceil(total / limit)
-        }
-      };
+      return rows;
     } catch (error) {
-      console.error('Equipment findByUserId error:', error);
+      console.error(`Грешка в Equipment.findByUserId: ${error.message}`);
       throw error;
     }
   }

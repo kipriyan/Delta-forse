@@ -6,6 +6,42 @@ const asyncHandler = require('../utils/asyncHandler');
 const { pool } = require('../config/db');
 const SavedJob = require('../models/SavedJob');
 
+// Функция за валидация на обява за работа
+const validateJobListing = (data) => {
+  const errors = [];
+
+  // Проверка за заглавие
+  if (!data.title || data.title.trim().length < 5) {
+    errors.push('Заглавието трябва да е поне 5 символа');
+  }
+
+  // Проверка за описание
+  if (!data.description || data.description.trim().length < 10) {
+    errors.push('Описанието трябва да е поне 10 символа');
+  }
+
+  // Проверка за локация
+  if (!data.location || data.location.trim().length < 2) {
+    errors.push('Локацията е задължителна');
+  }
+
+  // Проверка за тип работа
+  const validJobTypes = ['full-time', 'part-time', 'remote', 'contract', 'internship'];
+  if (!data.job_type || !validJobTypes.includes(data.job_type)) {
+    errors.push('Невалиден тип работа');
+  }
+
+  // Проверка за заплата (базова проверка)
+  if (data.salary && !/^\d+-\d+$|^\d+$/.test(data.salary)) {
+    errors.push('Невалиден формат за заплата');
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors: errors
+  };
+};
+
 // @desc    Получаване на всички обяви за работа с пагинация и филтриране
 // @route   GET /api/jobs
 // @access  Public
@@ -99,63 +135,133 @@ exports.createJob = asyncHandler(async (req, res, next) => {
 // @desc    Обновяване на обява за работа
 // @route   PUT /api/jobs/:id
 // @access  Private (само за собственика на обявата или админи)
-exports.updateJob = asyncHandler(async (req, res, next) => {
-  // Намиране на обявата
-  const job = await JobListing.findById(req.params.id);
-
-  if (!job) {
-    return next(new ErrorResponse(`Не е намерена обява с ID ${req.params.id}`, 404));
-  }
-
-  // Проверка за права (само собственикът на обявата или админи могат да я обновят)
-  if (job.user_id !== req.user.id && req.user.user_type !== 'admin') {
-    return next(new ErrorResponse('Нямате права да редактирате тази обява', 403));
-  }
-
-  // Валидиране на данните за обявата, ако се опитваме да обновим важни полета
-  if (req.body.title || req.body.description || req.body.location || req.body.job_type) {
-    const { isValid, errors } = validateJobListing({
-      ...job,
-      ...req.body
-    });
-
-    if (!isValid) {
-      return next(new ErrorResponse(errors.join(', '), 400));
+exports.updateJob = asyncHandler(async (req, res) => {
+  try {
+    // Валидиране на данните за обявата
+    const validation = validateJobListing(req.body);
+    
+    if (!validation.isValid) {
+      return res.status(400).json({
+        success: false,
+        error: validation.errors.join(', ')
+      });
     }
+    
+    // Проверка дали обявата съществува
+    const job = await JobListing.findById(req.params.id);
+    
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: `Не е намерена обява с ID ${req.params.id}`
+      });
+    }
+    
+    // Проверка дали текущият потребител има права да редактира обявата
+    if (job.user_id !== req.user.id && req.user.user_type !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Нямате право да редактирате тази обява'
+      });
+    }
+    
+    // Подготовка на данните за обновяване
+    const updateData = {
+      title: req.body.title,
+      description: req.body.description,
+      location: req.body.location,
+      job_type: req.body.job_type,
+      salary: req.body.salary,
+      requirements: req.body.requirements || job.requirements
+    };
+    
+    // Обновяване на обявата
+    const updatedJob = await JobListing.update(req.params.id, updateData);
+    
+    return res.status(200).json({
+      success: true,
+      data: updatedJob,
+      message: 'Обявата беше успешно обновена'
+    });
+  } catch (error) {
+    console.error('Грешка при обновяване на обява:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Сървърна грешка при обновяване на обявата'
+    });
   }
-
-  // Обновяване на обявата
-  const updatedJob = await JobListing.update(req.params.id, req.body);
-
-  res.status(200).json({
-    success: true,
-    data: updatedJob
-  });
 });
 
 // @desc    Изтриване на обява за работа
 // @route   DELETE /api/jobs/:id
 // @access  Private (само за собственика на обявата или админи)
 exports.deleteJob = asyncHandler(async (req, res, next) => {
-  // Намиране на обявата
-  const job = await JobListing.findById(req.params.id);
-
-  if (!job) {
-    return next(new ErrorResponse(`Не е намерена обява с ID ${req.params.id}`, 404));
+  try {
+    console.log(`Опит за изтриване на обява с ID: ${req.params.id}`);
+    
+    // Прямо SQL заявка към базата данни, без да използваме findById първо
+    const [jobs] = await pool.execute(`
+      SELECT * FROM job_listings 
+      WHERE id = ?
+    `, [req.params.id]);
+    
+    console.log(`SQL заявка върна ${jobs.length} резултата`);
+    
+    if (jobs.length === 0) {
+      console.log(`Не е намерена обява с ID ${req.params.id} в базата данни`);
+      return res.status(404).json({
+        success: false,
+        error: `Не е намерена обява с ID ${req.params.id}`
+      });
+    }
+    
+    const job = jobs[0];
+    
+    // Проверка за права (само собственикът на обявата или админи могат да я изтрият)
+    if (job.user_id !== req.user.id && req.user.user_type !== 'admin') {
+      console.log(`Потребител ${req.user.id} няма права да изтрие обява ${req.params.id}`);
+      return res.status(403).json({
+        success: false,
+        error: 'Нямате права да изтриете тази обява'
+      });
+    }
+    
+    console.log(`Започва изтриване на обява ${req.params.id}`);
+    
+    // Изтриване на обявата и свързаните данни
+    try {
+      // Премахваме изтриването на умения, тъй като таблицата не съществува
+      // await pool.execute('DELETE FROM job_skills WHERE job_id = ?', [req.params.id]);
+      
+      // Изтриване на запазените обяви
+      await pool.execute('DELETE FROM saved_jobs WHERE job_id = ?', [req.params.id]);
+      
+      // Изтриване на кандидатурите
+      await pool.execute('DELETE FROM job_applications WHERE job_id = ?', [req.params.id]);
+      
+      // Изтриване на самата обява
+      await pool.execute('DELETE FROM job_listings WHERE id = ?', [req.params.id]);
+      
+      console.log(`Обява ${req.params.id} успешно изтрита`);
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Обявата и всички свързани с нея данни бяха успешно изтрити'
+      });
+    } catch (deleteError) {
+      console.error('Грешка при изтриване на обява:', deleteError);
+      return res.status(500).json({
+        success: false,
+        error: 'Грешка при изтриване на обявата и свързаните данни'
+      });
+    }
+  } catch (error) {
+    console.error('Обща грешка в контролера за изтриване:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Сървърна грешка при изтриване'
+    });
   }
-
-  // Проверка за права (само собственикът на обявата или админи могат да я изтрият)
-  if (job.user_id !== req.user.id && req.user.user_type !== 'admin') {
-    return next(new ErrorResponse('Нямате права да изтриете тази обява', 403));
-  }
-
-  // Изтриване на обявата
-  await JobListing.delete(req.params.id);
-
-  res.status(200).json({
-    success: true,
-    data: {}
-  });
 });
 
 // @desc    Получаване на всички обяви за работа, създадени от текущия потребител

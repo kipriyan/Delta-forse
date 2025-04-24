@@ -2,6 +2,7 @@ const Equipment = require('../models/Equipment');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../utils/asyncHandler');
 const { pool } = require('../config/db');
+const EquipmentRental = require('../models/EquipmentRental');
 
 // @desc    Създаване на нова обява за екипировка
 // @route   POST /api/equipment
@@ -181,21 +182,29 @@ exports.searchEquipment = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Получаване на моята екипировка
+// @desc    Получаване на оборудване на текущия потребител
 // @route   GET /api/equipment/my
 // @access  Private
 exports.getMyEquipment = asyncHandler(async (req, res, next) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
+  const userId = req.user.id;
   
-  const result = await Equipment.findByUserId(req.user.id, page, limit);
-  
-  res.status(200).json({
-    success: true,
-    count: result.equipment.length,
-    pagination: result.pagination,
-    data: result.equipment
-  });
+  try {
+    console.log(`Аутентикиран потребител: ${req.user.email}`);
+    console.log(`Извличане на оборудване за потребител с ID: ${userId}`);
+    
+    const equipment = await Equipment.findByUserId(userId);
+    
+    console.log(`Намерени ${equipment.length} бр. оборудване за потребителя`);
+    
+    return res.status(200).json({
+      success: true,
+      count: equipment.length,
+      data: equipment
+    });
+  } catch (error) {
+    console.error(`Equipment findByUserId error:`, error);
+    return next(new ErrorResponse('Сървърна грешка при извличане на оборудването', 500));
+  }
 });
 
 // @desc    Получаване на категории екипировка

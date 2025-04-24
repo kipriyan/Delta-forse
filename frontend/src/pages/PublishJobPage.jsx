@@ -205,12 +205,10 @@ const PublishJobPage = () => {
                     className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
                     required
                   >
-                    <option value="">Изберете вид работа</option>
+
                     <option value="full-time">Пълен работен ден</option>
                     <option value="part-time">Непълен работен ден</option>
-                    <option value="contract">Договор</option>
-                    <option value="internship">Стаж</option>
-                    <option value="remote">Дистанционна работа</option>
+
                   </select>
                 </div>
 
@@ -291,12 +289,8 @@ const PublishJobPage = () => {
                     className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
                     required
                   >
-                    <option value="">Изберете тип заетост</option>
                     <option value="full-time">Пълен работен ден</option>
                     <option value="part-time">Непълен работен ден</option>
-                    <option value="contract">Договор</option>
-                    <option value="internship">Стаж</option>
-                    <option value="remote">Дистанционна работа</option>
                   </select>
                 </div>
 
