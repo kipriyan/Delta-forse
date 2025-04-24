@@ -153,21 +153,42 @@ exports.searchEquipment = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Получаване на моята екипировка
+// @desc    Получаване на оборудване на текущия потребител
 // @route   GET /api/equipment/my
 // @access  Private
 exports.getMyEquipment = asyncHandler(async (req, res, next) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
+  const userId = req.user.id;
   
-  const result = await Equipment.findByUserId(req.user.id, page, limit);
-  
-  res.status(200).json({
-    success: true,
-    count: result.equipment.length,
-    pagination: result.pagination,
-    data: result.equipment
-  });
+  try {
+    console.log(`Извличане на оборудване за потребител с ID: ${userId}`);
+    
+    // Извличане на оборудването на потребителя с допълнителна информация
+    const [equipment] = await pool.execute(`
+      SELECT 
+        e.*,
+        u.username as owner_name,
+        u.email as owner_email
+      FROM 
+        equipment e
+      JOIN 
+        users u ON e.user_id = u.id
+      WHERE 
+        e.user_id = ?
+      ORDER BY 
+        e.created_at DESC
+    `, [userId]);
+    
+    console.log(`Намерени ${equipment.length} бр. оборудване за потребителя`);
+    
+    return res.status(200).json({
+      success: true,
+      count: equipment.length,
+      data: equipment
+    });
+  } catch (error) {
+    console.error(`Грешка при извличане на оборудването за потребител ${userId}:`, error);
+    return next(new ErrorResponse('Сървърна грешка при извличане на оборудването', 500));
+  }
 });
 
 // @desc    Получаване на категории екипировка
