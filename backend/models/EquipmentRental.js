@@ -251,6 +251,54 @@ class EquipmentRental {
       throw error;
     }
   }
+
+  // Обновяване на заявка за наем
+  static async update(id, userId, updateData) {
+    try {
+      console.log(`Опит за обновяване на заявка с ID: ${id} от потребител: ${userId}`);
+      console.log('Данни за обновяване:', updateData);
+      
+      // Подготовка на данните за заявката
+      const { start_date, end_date, message } = updateData;
+      
+      // Проверка дали датите са валидни
+      if (new Date(start_date) > new Date(end_date)) {
+        throw new Error('Началната дата трябва да е преди крайната дата');
+      }
+      
+      // Проверка дали заявката съществува
+      const [existingRequest] = await pool.execute(
+        'SELECT * FROM rental_requests WHERE id = ?',
+        [id]
+      );
+      
+      if (existingRequest.length === 0) {
+        throw new Error(`Заявка с ID ${id} не съществува`);
+      }
+      
+      // Изпълнение на заявката за обновяване
+      await pool.execute(`
+        UPDATE rental_requests
+        SET start_date = ?, end_date = ?, message = ?
+        WHERE id = ? AND user_id = ?
+      `, [start_date, end_date, message || null, id, userId]);
+      
+      // Връщане на обновената заявка
+      const [updated] = await pool.execute(
+        'SELECT * FROM rental_requests WHERE id = ?',
+        [id]
+      );
+      
+      if (updated.length === 0) {
+        throw new Error('Неуспешно обновяване на заявката');
+      }
+      
+      return new EquipmentRental(updated[0]);
+    } catch (error) {
+      console.error('EquipmentRental update error:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = EquipmentRental; 

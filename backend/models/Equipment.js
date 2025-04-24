@@ -90,20 +90,35 @@ class Equipment {
   // Намиране на всичката екипировка с пагинация и филтриране
   static async findAll(page = 1, limit = 10, filters = {}) {
     try {
-      // Проверка и конвертиране на page и limit към числа
       page = parseInt(page, 10) || 1;
       limit = parseInt(limit, 10) || 10;
       const offset = (page - 1) * limit;
       
-      console.log('Извличане на оборудване:', { page, limit, offset, filters });
+      // Проверка за съществуване на таблицата users
+      const [userTableCheck] = await pool.execute("SHOW TABLES LIKE 'users'");
+      console.log('Проверка за таблица users:', userTableCheck);
       
-      // Генериране на базова заявка
+      if (userTableCheck.length === 0) {
+        throw new Error("Таблицата 'users' не съществува в базата данни!");
+      }
+      
+      // Проверка за структурата на таблицата users
+      const [userColumns] = await pool.execute("DESCRIBE users");
+      console.log('Колони в таблица users:', userColumns.map(col => col.Field));
+      
+      // Брой потребители в базата
+      const [userCount] = await pool.execute("SELECT COUNT(*) as count FROM users");
+      console.log('Брой потребители в базата:', userCount[0].count);
+      
+      // Генериране на SQL заявка
       let query = `
-        SELECT e.*, 
-          CONCAT(u.first_name, ' ', u.last_name) as owner_name, 
-          u.email as owner_email
+        SELECT e.*,
+               u.first_name,
+               u.last_name,
+               CONCAT(u.first_name, ' ', u.last_name) AS owner_name,
+               u.email AS owner_email
         FROM equipment e
-        JOIN users u ON e.user_id = u.id
+        LEFT JOIN users u ON e.user_id = u.id
         WHERE 1=1
       `;
       
@@ -157,38 +172,63 @@ class Equipment {
       console.log('SQL заявка:', query);
       console.log('Параметри:', params);
       
-      // Тестова заявка за директно логиране на всички потребители
-      const [users] = await pool.execute("SELECT id, CONCAT(first_name, ' ', last_name) as full_name FROM users");
-      console.log('Потребители в базата:', users);
-      
-      // Изпълнение на основната заявка
+      // Изпълнение на заявката
       const [equipment] = await pool.execute(query, params);
       
       console.log('Брой извлечени оборудвания:', equipment.length);
+      
       if (equipment.length > 0) {
-        console.log('Първо оборудване:', {
-          id: equipment[0].id,
-          title: equipment[0].title,
-          owner_name: equipment[0].owner_name,
-          user_id: equipment[0].user_id
+        // Проверка на данните за първите няколко оборудвания
+        equipment.slice(0, 3).forEach((item, idx) => {
+          console.log(`Оборудване #${idx + 1}:`, {
+            id: item.id,
+            title: item.title,
+            user_id: item.user_id,
+            first_name: item.first_name,
+            last_name: item.last_name,
+            owner_name: item.owner_name,
+            owner_email: item.owner_email
+          });
         });
         
-        // Проверяваме за валидни user_id в данните
-        console.log('User IDs в оборудването:', equipment.map(item => item.user_id));
-        
-        // Директна проверка за потребител с ID-то от първото оборудване
-        if (equipment[0].user_id) {
-          const [specificUser] = await pool.execute(
-            "SELECT id, CONCAT(first_name, ' ', last_name) as full_name FROM users WHERE id = ?", 
-            [equipment[0].user_id]
-          );
-          console.log('Проверка за потребител:', specificUser);
+        // Ако липсват имена на собственици, опитваме да ги намерим ръчно
+        const missingOwners = equipment.filter(e => !e.owner_name && e.user_id);
+        if (missingOwners.length > 0) {
+          console.log(`${missingOwners.length} оборудвания нямат данни за собственик. Опитваме се да ги намерим...`);
+          
+          for (const item of missingOwners) {
+            try {
+              const [ownerData] = await pool.execute(
+                "SELECT id, first_name, last_name, email FROM users WHERE id = ?", 
+                [item.user_id]
+              );
+              
+              if (ownerData.length > 0) {
+                item.first_name = ownerData[0].first_name;
+                item.last_name = ownerData[0].last_name;
+                item.owner_name = `${ownerData[0].first_name} ${ownerData[0].last_name}`;
+                item.owner_email = ownerData[0].email;
+                console.log(`Намерен собственик за оборудване ID ${item.id}: ${item.owner_name}`);
+              }
+            } catch (err) {
+              console.error(`Грешка при намиране на собственик за оборудване ID ${item.id}:`, err);
+            }
+          }
         }
       }
       
-      // Връщане на резултата с пълната информация за собствениците
+      // Връщане на резултата с пълната обработка на данните за собствениците
       return {
-        equipment: equipment.map(item => new Equipment(item)),
+        equipment: equipment.map(item => {
+          const equip = new Equipment(item);
+          
+          // Гарантиране, че owner_name и owner_email са правилно инициализирани
+          if (!equip.owner_name && (item.first_name || item.last_name)) {
+            equip.owner_name = `${item.first_name || ''} ${item.last_name || ''}`.trim();
+          }
+          
+          return equip;
+        }),
         pagination: {
           page,
           limit,
@@ -315,20 +355,15 @@ class Equipment {
         params.push(equipmentData.image_url);
       }
       
-      // Добавяне на обновеното време
-      updateFields.updated_at = 'NOW()';
-      
-      // Ако няма полета за обновяване, връщаме текущата екипировка
-      if (Object.keys(updateFields).length === 0) {
-        return equipment;
-      }
-      
-      // Създаване на SQL заявката
-      const setClause = Object.entries(updateFields).map(([key, value]) => `${key} = ${value}`).join(', ');
-      const query = `UPDATE equipment SET ${setClause} WHERE id = ?`;
-      
       // Добавяне на ID като последен параметър
       params.push(id);
+      
+      // Създаване на SQL заявката
+      const setClause = Object.entries(updateFields)
+        .filter(([key]) => key !== 'updated_at')
+        .map(([key, value]) => `${key} = ${value}`)
+        .join(', ');
+      const query = `UPDATE equipment SET ${setClause} WHERE id = ?`;
       
       // Изпълнение на заявката
       await pool.execute(query, params);

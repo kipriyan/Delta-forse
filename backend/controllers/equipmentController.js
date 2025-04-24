@@ -45,36 +45,44 @@ exports.createEquipment = asyncHandler(async (req, res, next) => {
 // @access  Public
 exports.getAllEquipment = asyncHandler(async (req, res, next) => {
   try {
-    // Извличане на query параметрите
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     
-    console.log('Получена заявка за оборудване:', {
-      page,
-      limit,
-      query: req.query
-    });
+    console.log('Получена заявка за оборудване:', { page, limit, query: req.query });
     
-    // Извличаме оборудването
+    // Извличаме оборудването с подробна информация за собствениците
     const result = await Equipment.findAll(page, limit, req.query);
     
-    // Логиране на резултата за дебъгване
-    console.log('Резултат от заявката:', {
-      count: result.equipment.length,
-      firstItem: result.equipment.length > 0 ? {
-        id: result.equipment[0].id,
-        title: result.equipment[0].title,
-        ownerName: result.equipment[0].owner_name,
-        userId: result.equipment[0].user_id
-      } : null
-    });
+    // Проверка за данни за собствениците
+    if (result.equipment.length > 0) {
+      result.equipment.forEach(item => {
+        if (!item.owner_name) {
+          console.warn(`Оборудване ID ${item.id} няма данни за собственик`);
+        }
+      });
+    }
     
-    // Коригирана структура на отговора - масивът с оборудване директно в data
+    // Връщаме данните с ясно структуриран формат
     res.json({
       success: true,
       count: result.equipment.length,
       pagination: result.pagination,
-      data: result.equipment
+      data: result.equipment.map(item => ({
+        id: item.id,
+        title: item.title,
+        description: item.description,
+        price: item.price,
+        category: item.category,
+        status: item.status,
+        location: item.location,
+        image_url: item.image_url,
+        is_available: item.is_available,
+        user_id: item.user_id,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+        owner_name: item.owner_name || 'Неизвестен потребител',
+        owner_email: item.owner_email || 'Няма данни за контакт'
+      }))
     });
   } catch (err) {
     console.error('Грешка при извличане на оборудване:', err);

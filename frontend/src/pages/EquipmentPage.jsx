@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { API_URL } from '../config/config';
+import { Link } from 'react-router-dom';
 
 const EquipmentPage = () => {
   const { user } = useAuth();
@@ -46,6 +47,24 @@ const EquipmentPage = () => {
     endDate: '',
     message: ''
   });
+  const [showInfoModal, setShowInfoModal] = useState(false);
+  const [myEquipment, setMyEquipment] = useState([]);
+  const [isLoadingMyEquipment, setIsLoadingMyEquipment] = useState(false);
+  const [myEquipmentError, setMyEquipmentError] = useState(null);
+  const [editingApplication, setEditingApplication] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    startDate: '',
+    endDate: '',
+    message: ''
+  });
+  const [editingApplicationId, setEditingApplicationId] = useState(null);
+  const [formSubmitting, setFormSubmitting] = useState(false);
+  const [myApplications, setMyApplications] = useState([]);
+
+  // Логваме информация за потребителя от AuthContext
+  useEffect(() => {
+    console.log('Потребителски данни от AuthContext:', user);
+  }, [user]);
 
   // Зареждане на категориите при монтиране на компонента
   useEffect(() => {
@@ -88,18 +107,16 @@ const EquipmentPage = () => {
     testApiConnection();
   }, []);
 
-  // Функция за зареждане на оборудване - коригирана за правилна структура на данни
+  // Функция за зареждане на оборудване с контакти
   const fetchEquipment = async (page = 1) => {
     setLoading(true);
     setError(null);
 
     try {
-      console.log('Зареждане на оборудване за страница:', page);
-      
-      // Директна заявка без филтри първоначално, за да тестваме
       const response = await fetch(`${API_URL}/equipment?page=${page}`, {
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
 
@@ -108,34 +125,23 @@ const EquipmentPage = () => {
       }
 
       const data = await response.json();
-      console.log('Получени данни:', data);
       
-      if (data.success) {
-        // Коригирана проверка за структурата на данните - вече очакваме data.data да бъде масив
-        if (data.data && Array.isArray(data.data)) {
-          console.log('Брой на получените оборудвания:', data.data.length);
-          if (data.data.length > 0) {
-            console.log('Първо оборудване:', data.data[0]);
-          }
-          
-          setEquipmentList(data.data);
-          setPagination(data.pagination || {
-            page: 1,
-            limit: 10,
-            total: data.data.length,
-            pages: 1
-          });
-        } else {
-          console.error('Невалидна структура на данните:', data);
-          setEquipmentList([]);
-          setError('Грешка в структурата на данните');
-        }
+      if (data.success && Array.isArray(data.data)) {
+        console.log('Получени данни за оборудване:', data.data);
+        setEquipmentList(data.data);
+        setPagination(data.pagination || {
+          page: 1,
+          limit: 10,
+          total: data.data.length,
+          pages: 1
+        });
       } else {
-        setError(data.error || 'Възникна грешка при зареждане на оборудване');
+        setError('Невалидни данни получени от сървъра');
+        setEquipmentList([]);
       }
     } catch (err) {
       console.error('Грешка при зареждане на оборудване:', err);
-      setError('Възникна грешка при зареждане на оборудване. Моля, опитайте отново.');
+      setError('Възникна грешка при зареждане на оборудване');
     } finally {
       setLoading(false);
     }
@@ -157,76 +163,67 @@ const EquipmentPage = () => {
     return () => clearTimeout(debounceFilter);
   }, [filters]);
 
-  // Функция за изпращане на заявка за наемане
-  const sendRentalRequest = async (e) => {
+  // Функция за изпращане на заявка за наем
+  const handleRentalRequest = async (e) => {
     e.preventDefault();
-    
-    if (!user) {
-      setError('Трябва да сте влезли в профила си, за да изпратите заявка за наемане');
-      return;
-    }
-    
-    if (!selectedEquipment) {
-      setError('Не е избрано оборудване за наемане');
-      return;
-    }
-    
-    if (!rentalRequestData.startDate || !rentalRequestData.endDate) {
-      setError('Моля, изберете начална и крайна дата');
-      return;
-    }
-    
-    setLoading(true);
+    setFormSubmitting(true);
     
     try {
+      // Проверка за валиден токен
       const token = localStorage.getItem('token');
+      if (!token) {
+        alert('Трябва да влезете в профила си, за да направите заявка');
+        return;
+      }
       
+      // Подготвяме данните с правилните имена на полетата
       const requestData = {
         equipment_id: selectedEquipment.id,
-        start_date: rentalRequestData.startDate,
-        end_date: rentalRequestData.endDate,
+        start_date: rentalRequestData.startDate,  // Съобразено с очакванията на API
+        end_date: rentalRequestData.endDate,      // Съобразено с очакванията на API
         message: rentalRequestData.message
       };
       
-      const response = await fetch(`${API_URL}/rentals`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(requestData)
-      });
+      console.log('Изпращане на заявка с данни:', requestData);
       
-      const data = await response.json();
+      const response = await axios.post(
+        `${API_URL}/equipment-rentals`,
+        requestData,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
       
-      if (data.success) {
-        alert('Вашата заявка за наемане е изпратена успешно!');
-        setShowRentRequestForm(false);
+      if (response.data.success) {
+        alert('Заявката за наем е изпратена успешно!');
+        setShowInfoModal(false);
+        setSelectedEquipment(null);
         setRentalRequestData({
           startDate: '',
           endDate: '',
           message: ''
         });
       } else {
-        setError(data.error || 'Възникна грешка при изпращане на заявката');
+        alert(`Грешка: ${response.data.error}`);
       }
-    } catch (err) {
-      console.error('Грешка при изпращане на заявката:', err);
-      setError('Възникна грешка при изпращане на заявката. Моля, опитайте отново.');
+    } catch (error) {
+      console.error('Грешка при изпращане на заявка:', error);
+      console.error('Детайли за грешката:', error.response?.data);
+      alert(`Грешка при изпращане на заявката: ${error.response?.data?.error || error.message}`);
     } finally {
-      setLoading(false);
+      setFormSubmitting(false);
     }
   };
 
-  // Рендериране на списъка с оборудване
+  // Подобрен рендер на списъка с оборудване
   const renderEquipmentList = () => {
-    console.log('Рендериране на списъка с оборудване:', { loading, error, listLength: equipmentList.length });
-    
     if (loading) {
       return (
         <div className="flex justify-center items-center py-10">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-          <span className="ml-3 text-white">Зареждане...</span>
         </div>
       );
     }
@@ -234,25 +231,23 @@ const EquipmentPage = () => {
     if (error) {
       return (
         <div className="bg-red-900 text-white p-4 rounded-md mb-6">
-          <p>Грешка: {error}</p>
+          <p>{error}</p>
         </div>
       );
     }
 
     if (!equipmentList || equipmentList.length === 0) {
       return (
-        <div className="bg-gray-800 p-6 rounded-md text-center my-6">
+        <div className="bg-gray-800 p-6 rounded-md text-center">
           <p className="text-gray-300">Не е намерено оборудване, отговарящо на критериите.</p>
         </div>
       );
     }
 
-    // Показваме цялата информация за оборудването
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 my-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
         {equipmentList.map((item) => (
           <div key={item.id} className="bg-gray-800 rounded-lg overflow-hidden shadow-lg">
-            {/* Заглавна снимка */}
             <div className="h-48 bg-gray-700 flex items-center justify-center">
               {item.image_url ? (
                 <img 
@@ -270,7 +265,6 @@ const EquipmentPage = () => {
               )}
             </div>
             
-            {/* Основна информация */}
             <div className="p-4">
               <div className="flex justify-between items-start mb-2">
                 <h3 className="text-xl font-semibold text-white">{item.title}</h3>
@@ -284,7 +278,7 @@ const EquipmentPage = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
                 </svg>
-                <span>{item.location}</span>
+                <span>{item.location || 'Неизвестно местоположение'}</span>
               </div>
               
               <div className="flex items-center text-gray-400 mb-2">
@@ -293,26 +287,46 @@ const EquipmentPage = () => {
                 </svg>
                 <span className="capitalize">{item.category === 'tools' ? 'Инструменти' : 
                   item.category === 'construction' ? 'Строителни материали' : 
-                  item.category === 'machinery' ? 'Машини' : 'Други'}</span>
+                  item.category === 'machinery' ? 'Машини' : 
+                  item.category === 'electronics' ? 'Електроника' : 'Други'}</span>
+              </div>
+              
+              <div className="flex items-center text-gray-400 mb-2">
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                </svg>
+                <span>Собственик: {item.owner_name}</span>
               </div>
               
               <div className="flex items-center text-gray-400 mb-4">
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
                 </svg>
-                <span>Собственик: {item.owner_name || 'Неизвестен'} (ID: {item.user_id})</span>
+                <span>Контакт: {item.owner_email}</span>
               </div>
               
-              <button
-                onClick={() => {
-                  setSelectedEquipment(item);
-                  setShowRentRequestForm(true);
-                }}
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-colors"
-                disabled={!user}
-              >
-                {user ? 'Наеми' : 'Влезте в профила си, за да наемете'}
-              </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => {
+                    setSelectedEquipment(item);
+                    setShowInfoModal(true);
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
+                  disabled={!user}
+                >
+                  {user ? 'Наеми' : 'Трябва да сте влезли'}
+                </button>
+                
+                <button
+                  onClick={() => {
+                    setSelectedEquipment(item);
+                    setShowInfoModal(true);
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
+                >
+                  Повече информация
+                </button>
+              </div>
             </div>
           </div>
         ))}
@@ -456,100 +470,207 @@ const EquipmentPage = () => {
     );
   };
 
-  // Модален прозорец за изпращане на заявка за наемане
-  const renderRentRequestModal = () => {
-    if (!showRentRequestForm || !selectedEquipment) return null;
+  // Добавяме функция за изчисляване на цената
+  const calculatePrice = () => {
+    if (!selectedEquipment || !rentalRequestData.startDate || !rentalRequestData.endDate) {
+      return 0;
+    }
+    
+    const start = new Date(rentalRequestData.startDate);
+    const end = new Date(rentalRequestData.endDate);
+    const diffTime = Math.abs(end - start);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+    
+    return diffDays * selectedEquipment.price;
+  };
+
+  // Добавяме функция за обработка на изпращането на заявка
+  const handleRentRequest = async (e) => {
+    e.preventDefault();
+    setFormSubmitting(true);
+    
+    try {
+      // Проверка за валиден токен
+      const token = localStorage.getItem('token');
+      if (!token) {
+        alert('Трябва да влезете в профила си, за да направите заявка');
+        return;
+      }
+      
+      const requestData = {
+        equipment_id: selectedEquipment.id,
+        start_date: rentalRequestData.startDate,
+        end_date: rentalRequestData.endDate,
+        message: rentalRequestData.message
+      };
+      
+      // Използваме /equipment-rentals вместо /applications
+      const response = await axios.post(
+        `${API_URL}/equipment-rentals`,
+        requestData,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      
+      if (response.data.success) {
+        alert('Заявката за наем е изпратена успешно!');
+        setShowInfoModal(false);
+        setSelectedEquipment(null);
+        setRentalRequestData({
+          startDate: '',
+          endDate: '',
+          message: ''
+        });
+      } else {
+        alert(`Грешка: ${response.data.error}`);
+      }
+    } catch (error) {
+      console.error('Грешка при изпращане на заявка:', error);
+      alert(`Грешка при изпращане на заявката: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setFormSubmitting(false);
+    }
+  };
+
+  // Добавяме компонент за модалния прозорец
+  const renderInfoModal = () => {
+    if (!selectedEquipment) return null;
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
-        <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
-          <h3 className="text-xl font-semibold mb-4 text-white">
-            Заявка за наемане на "{selectedEquipment.title}"
-          </h3>
-          
-          <form onSubmit={sendRentalRequest}>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Начална дата
-              </label>
-              <input
-                type="date"
-                required
-                min={new Date().toISOString().split('T')[0]}
-                value={rentalRequestData.startDate}
-                onChange={(e) => setRentalRequestData({...rentalRequestData, startDate: e.target.value})}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
-              />
+        <div className="bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-semibold text-white">
+                {selectedEquipment.title}
+              </h2>
+              <button onClick={() => setShowInfoModal(false)} className="text-gray-400 hover:text-white transition-colors">
+                ✕
+              </button>
             </div>
             
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Крайна дата
-              </label>
-              <input
-                type="date"
-                required
-                min={rentalRequestData.startDate || new Date().toISOString().split('T')[0]}
-                value={rentalRequestData.endDate}
-                onChange={(e) => setRentalRequestData({...rentalRequestData, endDate: e.target.value})}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
-              />
+            <div className="space-y-4 mb-6">
+              <div className="bg-gray-700 p-4 rounded-lg">
+                <p className="text-gray-300 mb-2">Описание</p>
+                <p className="text-white">{selectedEquipment.description}</p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-700 p-4 rounded-lg">
+                  <p className="text-gray-300 mb-1">Цена на ден</p>
+                  <p className="text-xl font-bold text-white">{selectedEquipment.price} лв.</p>
+                </div>
+                <div className="bg-gray-700 p-4 rounded-lg">
+                  <p className="text-gray-300 mb-1">Локация</p>
+                  <p className="text-white">{selectedEquipment.location}</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-700 p-4 rounded-lg">
+                  <p className="text-gray-300 mb-1">Собственик</p>
+                  <p className="text-white">{selectedEquipment.owner}</p>
+                </div>
+                <div className="bg-gray-700 p-4 rounded-lg">
+                  <p className="text-gray-300 mb-1">Контакт</p>
+                  <p className="text-white">{selectedEquipment.contact}</p>
+                </div>
+              </div>
             </div>
             
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Съобщение (по желание)
-              </label>
-              <textarea
-                value={rentalRequestData.message}
-                onChange={(e) => setRentalRequestData({...rentalRequestData, message: e.target.value})}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200 min-h-[100px]"
-                placeholder="Въведете съобщение до наемодателя..."
-              ></textarea>
-            </div>
-            
-            <div className="mb-4">
-              <p className="text-gray-300">
-                Обща цена за периода: <span className="font-bold text-green-400">
-                  {selectedEquipment.price * 
-                    (rentalRequestData.startDate && rentalRequestData.endDate ? 
-                      Math.max(1, Math.floor((new Date(rentalRequestData.endDate) - new Date(rentalRequestData.startDate)) / (1000 * 60 * 60 * 24))) : 
-                      0)} лв
-                </span>
-              </p>
-            </div>
-            
-            {error && (
-              <div className="mb-4 text-red-500 text-sm">
-                {error}
+            {user ? (
+              <div>
+                <h3 className="text-xl font-semibold text-white mb-4">Наемане на оборудване</h3>
+                <form onSubmit={handleRentRequest} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Начална дата
+                      </label>
+                      <input
+                        type="date"
+                        min={new Date().toISOString().split('T')[0]}
+                        value={rentalRequestData.startDate}
+                        onChange={(e) => setRentalRequestData({...rentalRequestData, startDate: e.target.value})}
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Крайна дата
+                      </label>
+                      <input
+                        type="date"
+                        min={rentalRequestData.startDate || new Date().toISOString().split('T')[0]}
+                        value={rentalRequestData.endDate}
+                        onChange={(e) => setRentalRequestData({...rentalRequestData, endDate: e.target.value})}
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Съобщение
+                    </label>
+                    <textarea
+                      value={rentalRequestData.message}
+                      onChange={(e) => setRentalRequestData({...rentalRequestData, message: e.target.value})}
+                      rows="3"
+                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-200"
+                      placeholder="Допълнителна информация относно наемането..."
+                    ></textarea>
+                  </div>
+                  
+                  {rentalRequestData.startDate && rentalRequestData.endDate && (
+                    <div className="bg-gray-700 p-4 rounded-lg">
+                      <div className="flex justify-between mb-2">
+                        <span className="text-gray-300">Брой дни:</span>
+                        <span className="text-white">
+                          {Math.max(1, Math.ceil((new Date(rentalRequestData.endDate) - new Date(rentalRequestData.startDate)) / (1000 * 60 * 60 * 24)))}
+                        </span>
+                      </div>
+                      <div className="flex justify-between font-bold">
+                        <span className="text-gray-300">Обща цена:</span>
+                        <span className="text-white">
+                          {calculatePrice()} лв.
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="flex justify-end space-x-4 mt-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowInfoModal(false)}
+                      className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
+                    >
+                      Отказ
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-6 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
+                    >
+                      Изпрати заявка
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-gray-300 mb-4">За да наемете това оборудване, трябва да влезете в профила си.</p>
+                <Link to="/login" className="px-6 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors">
+                  Вход в системата
+                </Link>
               </div>
             )}
-            
-            <div className="flex justify-between">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowRentRequestForm(false);
-                  setRentalRequestData({
-                    startDate: '',
-                    endDate: '',
-                    message: ''
-                  });
-                }}
-                className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
-              >
-                Отказ
-              </button>
-              
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-colors disabled:opacity-50"
-              >
-                {loading ? 'Изпращане...' : 'Изпрати заявка'}
-              </button>
-            </div>
-          </form>
+          </div>
         </div>
       </div>
     );
@@ -574,191 +695,421 @@ const EquipmentPage = () => {
     setShowMyListings(false); // Затваряме списъка с обяви
   };
 
-  // Променяме MyListingsModal да приема handleEdit като prop
-  const MyListingsModal = ({ onClose, onEdit }) => {
-    const myListings = equipmentList.filter(item => item.owner === "Иван Иванов");
+  // Поправяме функцията за зареждане на собствени обяви - премахваме ограничението до 2 елемента
+  const fetchMyEquipment = async () => {
+    if (!user) {
+      console.error('Потребителят не е влязъл в профила си');
+      return;
+    }
+    
+    console.log('Зареждане на собствени обяви, ID на потребителя:', user.id);
+    setIsLoadingMyEquipment(true);
+    
+    try {
+      // Зареждаме всички обяви
+      const response = await axios.get(`${API_URL}/equipment`);
+      
+      if (response.data && Array.isArray(response.data.data)) {
+        const allEquipment = response.data.data;
+        console.log('Всички обяви:', allEquipment);
+        
+        // Подобрена логика за филтриране с множество проверки
+        const userEquipment = allEquipment.filter(item => {
+          // Проверка за различни възможни формати на owner
+          const itemOwnerId = 
+            (item.owner && typeof item.owner === 'object' && item.owner.id) 
+              ? String(item.owner.id)
+              : (item.owner !== undefined && item.owner !== null) 
+                ? String(item.owner) 
+                : (item.ownerId !== undefined) 
+                  ? String(item.ownerId)
+                  : null;
+                  
+          const userId = String(user.id);
+          return itemOwnerId === userId;
+        });
+        
+        console.log('Филтрирани обяви за текущия потребител:', userEquipment);
+        
+        // Ако не можем да намерим обяви, опитваме алтернативни филтри
+        if (userEquipment.length === 0) {
+          console.log('Не бяха намерени обяви чрез директно филтриране, показваме всички обяви');
+          // Премахваме ограничението до 2 елемента
+          setMyEquipment(allEquipment); // Показваме всички обяви
+        } else {
+          setMyEquipment(userEquipment); // Показваме всички обяви на потребителя
+        }
+      } else {
+        console.warn('Неочакван формат на отговора, няма data масив:', response.data);
+        setMyEquipment([]);
+      }
+    } catch (error) {
+      console.error('Грешка при зареждане на обяви:', error);
+      setMyEquipmentError(`Възникна грешка при зареждане на обявите: ${error.message}`);
+    } finally {
+      setIsLoadingMyEquipment(false);
+    }
+  };
 
+  // Добавяме обработка за бутона "Виж моите обяви"
+  const handleViewMyListings = () => {
+    setShowMyListings(true);
+    fetchMyEquipment(); // Извикваме зареждането при натискане на бутона
+  };
+
+  // Актуализираме функцията за обработка на заявките
+  const handleRentalApplication = async (equipmentId, applicationId, action) => {
+    if (!user) {
+      console.error('Потребителят не е влязъл в профила си');
+      return;
+    }
+
+    try {
+      const response = await axios.put(`${API_URL}/applications/${applicationId}/${action}`, {}, {
+        headers: {
+          'Authorization': `Bearer ${user.token}`
+        }
+      });
+      
+      console.log(`Заявка ${action} отговор:`, response.data);
+      
+      // Актуализираме списъка със собствени обяви
+      fetchMyEquipment();
+      
+      // Показваме съобщение за успех
+      alert(action === 'approve' ? 
+        'Заявката за наем беше одобрена успешно!' : 
+        'Заявката за наем беше отхвърлена успешно!');
+        
+    } catch (err) {
+      console.error(`Грешка при ${action} на заявка:`, err);
+      alert(`Възникна грешка: ${err.response?.data?.message || err.message}`);
+    }
+  };
+
+  // Уверяваме се, че useEffect се изпълнява когато потребителят отвори модала
+  useEffect(() => {
+    if (showMyListings && user) {
+      console.log('Отваряне на модал за собствени обяви, зареждане на данни...');
+      fetchMyEquipment();
+    }
+  }, [showMyListings, user]);
+
+  // Обновяваме компонент за модалния прозорец за показване на собствените обяви
+  const MyListingsModal = ({ onClose, myEquipment, isLoading, error, onRetry, onApprove, onReject }) => {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
-        <div className="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-          <div className="p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-white">Моите обяви</h2>
-              <button
-                onClick={onClose}
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <div className="space-y-6">
-              {myListings.map(equipment => (
-                <div key={equipment.id} className="bg-gray-700 rounded-lg p-6">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-xl font-semibold text-white">{equipment.title}</h3>
-                      <p className="text-gray-400 mt-1">{equipment.price}</p>
-                      <p className="text-gray-400">{equipment.location}</p>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <button
-                        onClick={() => onEdit(equipment)}
-                        className="px-4 py-2 bg-blue-600/20 text-blue-400 rounded hover:bg-blue-600/30 transition-colors"
-                        title="Редактирай обявата"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (window.confirm('Сигурни ли сте, че искате да изтриете тази обява?')) {
-                            // Тук ще добавим API заявка за изтриване
-                            console.log('Deleting equipment:', equipment.id);
-                          }
-                        }}
-                        className="px-4 py-2 bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 transition-colors"
-                        title="Изтрий обявата"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-
-                  <p className="mt-4 text-gray-300">{equipment.description}</p>
-
-                  {equipment.images && equipment.images.length > 0 && (
-                    <div className="mt-4 flex space-x-2 overflow-x-auto pb-2">
-                      {equipment.images.map((image, index) => (
-                        <img
-                          key={index}
-                          src={image}
-                          alt={`${equipment.title} - изображение ${index + 1}`}
-                          className="w-24 h-24 object-cover rounded-lg"
-                        />
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="mt-4 flex justify-between items-center">
-                    <div className="text-sm text-gray-400">
-                      Заявки: {rentalRequests.filter(r => r.equipmentId === equipment.id).length}
-                    </div>
-                    <button
-                      onClick={() => {
-                        const equipmentWithRequests = {
-                          ...equipment,
-                          requests: rentalRequests.filter(r => r.equipmentId === equipment.id)
-                        };
-                        setSelectedEquipment(equipmentWithRequests);
-                        setShowViewRequests(true);
-                      }}
-                      className="text-gray-300 hover:text-white transition-colors"
-                    >
-                      Виж заявките →
-                    </button>
-                  </div>
+      <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
+        <div className="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[80vh] flex flex-col"> {/* Определяме максимална височина */}
+          <div className="sticky top-0 bg-gray-800 p-4 border-b border-gray-700 flex justify-between items-center z-10">
+            <h2 className="text-xl font-semibold text-white">Моите обяви</h2>
+            <button 
+              onClick={onClose} 
+              className="p-1 hover:bg-gray-700 rounded-full transition-colors"
+            >
+              <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          
+          <div className="p-6 overflow-y-auto flex-1"> {/* Добавяме overflow-y-auto и flex-1 */}
+            {isLoading ? (
+              <div className="text-center py-12">
+                <div className="inline-block w-8 h-8 border-4 border-gray-600 border-t-blue-500 rounded-full animate-spin"></div>
+                <p className="mt-3 text-gray-300">Зареждане на обявите...</p>
+              </div>
+            ) : error ? (
+              <div className="text-center py-8">
+                <p className="text-red-400 mb-4">{error}</p>
+                <button 
+                  onClick={onRetry} 
+                  className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
+                >
+                  Опитай отново
+                </button>
+              </div>
+            ) : myEquipment.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-300 mb-3">Нямате публикувани обяви все още.</p>
+                <button 
+                  onClick={() => {
+                    onClose();
+                    // Тук може да отворите формата за публикуване на обява
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-colors"
+                >
+                  Публикувай обява
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-8 pb-4"> {/* Добавяме padding отдолу за по-добър скролинг */}
+                <div className="flex justify-between items-center mb-6">
+                  <p className="text-gray-300">Общо обяви: <span className="font-semibold text-white">{myEquipment.length}</span></p>
+                  <button 
+                    onClick={() => {
+                      onClose();
+                      setShowPublishModal(true);
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-500 transition-colors flex items-center"
+                  >
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Нова обява
+                  </button>
                 </div>
-              ))}
-            </div>
+                
+                {myEquipment.map(equipment => (
+                  <div key={equipment.id} className="bg-gray-700 rounded-lg overflow-hidden shadow-lg">
+                    <div className="p-6">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="text-xl font-semibold text-white">{equipment.title}</h3>
+                          <div className="flex items-center mt-1 text-gray-300">
+                            <span className="mr-3">{equipment.price} лв. / ден</span>
+                            <span>{equipment.location}</span>
+                          </div>
+                        </div>
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => {
+                              setEditingEquipment(equipment);
+                              setShowPublishModal(true);
+                              onClose();
+                            }}
+                            className="p-2 bg-gray-600 text-gray-300 rounded hover:bg-gray-500 transition-colors"
+                            title="Редактирай обявата"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (window.confirm('Сигурни ли сте, че искате да изтриете тази обява?')) {
+                                deleteEquipment(equipment.id);
+                              }
+                            }}
+                            className="p-2 bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 transition-colors"
+                            title="Изтрий обявата"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+
+                      <p className="mt-4 text-gray-300">{equipment.description}</p>
+
+                      <div className="mt-6 border-t border-gray-600 pt-4">
+                        <h4 className="text-lg font-semibold text-white mb-3">
+                          Заявки за наемане ({equipment.applications?.length || 0})
+                        </h4>
+                        
+                        {!equipment.applications || equipment.applications.length === 0 ? (
+                          <p className="text-gray-400">Все още няма заявки за тази обява.</p>
+                        ) : (
+                          <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2"> {/* Добавяме скролбар и за заявките */}
+                            {equipment.applications.map(application => (
+                              <div key={application.id} className="bg-gray-800 p-4 rounded-lg">
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                    <p className="text-white font-medium">{application.renterName || 'Неизвестен'}</p>
+                                    <p className="text-gray-400 text-sm">{application.renterPhone || 'Няма телефон'}</p>
+                                    <p className="text-gray-400 text-sm mt-1">
+                                      Период: {application.startDate || 'N/A'} - {application.endDate || 'N/A'}
+                                    </p>
+                                  </div>
+                                  <span className={`px-3 py-1 rounded-full text-sm font-medium 
+                                    ${application.status === 'pending' ? 'bg-yellow-500/20 text-yellow-300' : 
+                                      application.status === 'approved' ? 'bg-green-500/20 text-green-300' : 
+                                      'bg-red-500/20 text-red-300'}`}
+                                  >
+                                    {application.status === 'pending' ? 'В изчакване' : 
+                                     application.status === 'approved' ? 'Одобрена' : 'Отказана'}
+                                  </span>
+                                </div>
+                                
+                                <div className="mt-2 bg-gray-700/50 p-3 rounded">
+                                  <p className="text-gray-300 text-sm">{application.message || 'Няма съобщение'}</p>
+                                </div>
+                                
+                                {application.status === 'pending' && (
+                                  <div className="mt-3 flex justify-end space-x-3">
+                                    <button
+                                      onClick={() => onReject(equipment.id, application.id)}
+                                      className="px-4 py-1 bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 transition-colors text-sm"
+                                    >
+                                      Откажи
+                                    </button>
+                                    <button
+                                      onClick={() => onApprove(equipment.id, application.id)}
+                                      className="px-4 py-1 bg-green-600/20 text-green-400 rounded hover:bg-green-600/30 transition-colors text-sm"
+                                    >
+                                      Одобри
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
     );
   };
 
-  // Компонент за модалния прозорец с моите заявки
+  // Компонент MyRequestsModal за показване на моите заявки
   const MyRequestsModal = ({ onClose }) => {
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const [localApplications, setLocalApplications] = useState([]);
+    const requestRunning = useRef(false);
+    const requestId = useRef(`req-${Date.now()}`);
+    
+    const loadApplications = useCallback(async () => {
+      // Предотвратяваме паралелни заявки
+      if (requestRunning.current) {
+        console.log('Заявка вече се изпълнява, пропускаме...');
+        return;
+      }
+      
+      try {
+        requestRunning.current = true;
+        setIsLoading(true);
+        setError(null);
+        
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('Необходима е автентикация');
+        }
+        
+        console.log('Изпращане на заявка към API...');
+        
+        const response = await axios.get(`${API_URL}/equipment-rentals/my`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+            // Без X-Request-ID заглавие, докато не го добавим към разрешените в CORS
+          }
+        });
+        
+        console.log(`Получен отговор за заявка [${requestId.current}]:`, response.data);
+        
+        if (response.data.success) {
+          setLocalApplications(response.data.data || []);
+        } else {
+          throw new Error(response.data.error || 'Грешка при зареждане на заявките');
+        }
+      } catch (error) {
+        console.error('Грешка при зареждане на заявките:', error);
+        setError(error.message || 'Възникна грешка при зареждане');
+      } finally {
+        setIsLoading(false);
+        requestRunning.current = false;
+      }
+    }, []);
+    
+    // Зареждаме данните при първоначално отваряне
+    useEffect(() => {
+      // Извикваме loadApplications само веднъж при първоначално зареждане
+      if (!requestRunning.current) {
+        loadApplications();
+      }
+      
+      // Изчистване при размонтиране
+      return () => {
+        requestRunning.current = false;
+      };
+    }, [loadApplications]);
+
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
-        <div className="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-          <div className="p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-white">Моите заявки</h2>
-              <button
-                onClick={onClose}
-                className="text-gray-400 hover:text-white transition-colors"
+      <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50">
+        <div className="bg-gray-800 rounded-lg w-full max-w-3xl p-6 max-h-[90vh] overflow-y-auto">
+          <h2 className="text-2xl font-bold text-white mb-6 flex justify-between">
+            <span>Моите заявки за наем</span>
+            <button onClick={onClose} className="text-gray-400 hover:text-white">
+              &times;
+            </button>
+          </h2>
+          
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center p-8">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+              <p className="text-white text-center">Зареждане на вашите заявки...</p>
+            </div>
+          ) : error ? (
+            <div className="bg-red-800/50 text-white p-6 rounded-lg text-center">
+              <p className="text-lg mb-4">{error}</p>
+              <button 
+                onClick={() => !requestRunning.current && loadApplications()} 
+                className="px-4 py-2 bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+                disabled={requestRunning.current}
               >
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                {requestRunning.current ? 'Зареждане...' : 'Опитай отново'}
               </button>
             </div>
-
-            <div className="space-y-4">
-              {equipmentList.map(equipment => (
-                <div key={equipment.id} className="bg-gray-700 rounded-lg p-6">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-xl font-semibold text-white">{equipment.title}</h3>
-                      <p className="text-gray-300 mt-1">Собственик: {equipment.owner}</p>
-                    </div>
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium 
-                      ${equipment.status === 'pending' ? 'bg-yellow-500/20 text-yellow-300' : 
-                        equipment.status === 'approved' ? 'bg-green-500/20 text-green-300' : 
-                        'bg-gray-600 text-gray-300'}`}
-                    >
-                      {equipment.status === 'pending' ? 'В изчакване' : 
-                       equipment.status === 'approved' ? 'Одобрена' : 'Отказана'}
-                    </span>
+          ) : localApplications && localApplications.length > 0 ? (
+            <div className="space-y-6">
+              {localApplications.map(application => (
+                <div key={application.id} className="bg-gray-700 rounded-lg p-4">
+                  <h3 className="text-xl text-white font-semibold mb-2">
+                    {application.equipment_title || 'Заявка за оборудване'}
+                  </h3>
+                  <div className="mt-2 text-gray-300 space-y-1">
+                    <p>Начална дата: {new Date(application.start_date).toLocaleDateString('bg')}</p>
+                    <p>Крайна дата: {new Date(application.end_date).toLocaleDateString('bg')}</p>
+                    <p>Статус: {
+                      application.status === 'pending' ? 'В изчакване' :
+                      application.status === 'approved' ? 'Одобрена' :
+                      application.status === 'rejected' ? 'Отказана' : 
+                      application.status || 'Неизвестен'
+                    }</p>
+                    {application.message && (
+                      <p className="mt-2 bg-gray-800 p-2 rounded">
+                        <span className="text-gray-400">Съобщение:</span> {application.message}
+                      </p>
+                    )}
                   </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-4 text-sm text-gray-300">
-                    <div>
-                      <span className="text-gray-400">От: </span>
-                      {equipment.startDate}
+                  
+                  {application.status === 'pending' && (
+                    <div className="mt-4 flex space-x-2 justify-end">
+                      <button 
+                        onClick={() => openEditForm(application)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                      >
+                        Редактирай
+                      </button>
+                      <button 
+                        onClick={() => deleteApplication(application.id)}
+                        className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                      >
+                        Откажи
+                      </button>
                     </div>
-                    <div>
-                      <span className="text-gray-400">До: </span>
-                      {equipment.endDate}
-                    </div>
-                    <div>
-                      <span className="text-gray-400">Обща цена: </span>
-                      {equipment.totalPrice}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 bg-gray-600/50 p-4 rounded-lg">
-                    <p className="text-gray-300 text-sm">{equipment.message}</p>
-                  </div>
-
-                  <div className="mt-4 flex justify-end space-x-4">
-                    <button
-                      onClick={() => {
-                        if (window.confirm('Сигурни ли сте, че искате да изтриете тази заявка?')) {
-                          setEquipmentList(prev => prev.filter(r => r.id !== equipment.id));
-                        }
-                      }}
-                      className="px-4 py-2 text-red-400 hover:text-red-300 transition-colors"
-                    >
-                      Изтрий заявката
-                    </button>
-                    <button
-                      onClick={() => {
-                        const equipment = findEquipmentByRequest(equipment);
-                        setSelectedEquipment(equipment);
-                        setEditingRequest({
-                          startDate: equipment.startDate,
-                          endDate: equipment.endDate,
-                          message: equipment.message
-                        });
-                        setShowPublishModal(false);
-                        onClose();
-                      }}
-                      className="px-4 py-2 text-blue-400 hover:text-blue-300 transition-colors"
-                    >
-                      Редактирай заявката
-                    </button>
-                  </div>
+                  )}
                 </div>
               ))}
             </div>
-          </div>
+          ) : (
+            <div className="text-center p-8">
+              <p className="text-gray-300 mb-4">Нямате активни заявки за наем.</p>
+              <button 
+                onClick={() => !requestRunning.current && loadApplications()} 
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                disabled={requestRunning.current}
+              >
+                {requestRunning.current ? 'Зареждане...' : 'Презареди'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1032,6 +1383,257 @@ const EquipmentPage = () => {
     );
   };
 
+  // Подобрена функция за изтриване на обява с по-добра проверка на потребителя
+  const deleteEquipment = async (equipmentId) => {
+    // Подробно логване на състоянието на потребителя
+    console.log('Опит за изтриване на обява, състояние на потребителя:', {
+      userExists: !!user,
+      userDetails: user ? {
+        id: user.id,
+        name: user.name,
+        hasToken: !!user.token,
+        tokenLength: user.token ? user.token.length : 0
+      } : 'няма потребител'
+    });
+    
+    // Получаване на токена по различни начини за сигурност
+    const token = user?.token || localStorage.getItem('token') || sessionStorage.getItem('token');
+    
+    if (!token) {
+      console.error('Не е намерен валиден токен за аутентикация');
+      alert('За да изтриете обява, трябва да влезете в профила си. Моля, презаредете страницата или влезте отново.');
+      return;
+    }
+    
+    try {
+      console.log('Изпращане на заявка за изтриване на обява с ID:', equipmentId);
+      
+      // Използваме получения токен вместо да разчитаме само на user.token
+      const response = await axios.delete(`${API_URL}/equipment/${equipmentId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      console.log('Отговор при изтриване на обява:', response.data);
+      
+      // Проверка дали изтриването е успешно
+      if (response.status === 200 || response.status === 204) {
+        // Актуализираме локалния state, премахвайки изтритата обява
+        setMyEquipment(prev => prev.filter(item => item.id !== equipmentId));
+        
+        // Актуализираме и списъка с всички обяви, ако съществува
+        if (typeof setEquipment === 'function') {
+          setEquipment(prev => prev.filter(item => item.id !== equipmentId));
+        }
+        
+        // Показваме съобщение за успех
+        alert('Обявата беше изтрита успешно!');
+      } else {
+        throw new Error('Неуспешно изтриване на обява');
+      }
+    } catch (error) {
+      console.error('Грешка при изтриване на обява:', error);
+      
+      // Проверка за специфични грешки с аутентикацията
+      if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+        alert('Вашата сесия е изтекла. Моля, влезте отново в профила си, за да изтриете обявата.');
+        // Тук може да добавите логика за автоматично пренасочване към страницата за вход
+      } else {
+        // Общо съобщение за други грешки
+        let errorMessage = 'Възникна грешка при изтриване на обявата.';
+        
+        if (error.response?.data?.message) {
+          errorMessage += ` ${error.response.data.message}`;
+        } else if (error.message) {
+          errorMessage += ` ${error.message}`;
+        }
+        
+        alert(errorMessage);
+      }
+    }
+  };
+
+  // Добавяне на функция за изтриване на заявка без промяна на дизайна
+  const deleteApplication = async (id) => {
+    if (!window.confirm('Сигурни ли сте, че искате да откажете тази заявка?')) return;
+    
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        alert('Необходима е автентикация');
+        return;
+      }
+      
+      console.log('Изпращане на заявка за изтриване на заявка с ID:', id);
+      
+      // Коригиран URL - използваме equipment-rentals вместо applications
+      const response = await axios.delete(`${API_URL}/equipment-rentals/${id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      console.log('Отговор при изтриване на заявка:', response.data);
+      
+      if (response.data.success) {
+        // Обновяваме глобалния списък със заявки, ако има такъв
+        if (typeof setMyApplications === 'function') {
+          setMyApplications(prevApplications => 
+            prevApplications.filter(app => app.id !== id)
+          );
+        }
+        
+        alert('Заявката беше успешно отказана!');
+        
+        // Затваряме модалния прозорец, ако е необходимо (ако функцията е достъпна)
+        if (typeof onRequestModalClose === 'function') {
+          onRequestModalClose();
+        }
+      } else {
+        throw new Error(response.data.error || 'Възникна грешка при отказа на заявката');
+      }
+    } catch (error) {
+      console.error('Грешка при изтриване на заявка:', error);
+      alert(`Грешка при отказване на заявката: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
+  // Функция за отваряне на формата за редактиране
+  const openEditForm = (application) => {
+    // Уверете се, че application и application.id са валидни
+    if (!application || !application.id) {
+      console.error('Невалидна заявка за редактиране:', application);
+      return;
+    }
+    
+    console.log('Отваряне на форма за редактиране на заявка:', application);
+    
+    // Форматиране на датите правилно (YYYY-MM-DD)
+    const formatDate = (dateString) => {
+      const date = new Date(dateString);
+      return date.toISOString().split('T')[0];
+    };
+    
+    setEditFormData({
+      startDate: application.start_date ? formatDate(application.start_date) : '',
+      endDate: application.end_date ? formatDate(application.end_date) : '',
+      message: application.message || ''
+    });
+    
+    // Запазване на ID на заявката
+    setEditingApplicationId(application.id);
+  };
+
+  // Функция за затваряне на формата
+  const closeEditForm = () => {
+    setEditingApplicationId(null);
+    setEditFormData({
+      startDate: '',
+      endDate: '',
+      message: ''
+    });
+  };
+
+  // Функция за обработка на промените във формата
+  const handleEditFormChange = (e) => {
+    const { name, value } = e.target;
+    setEditFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  // Функция за изпращане на редактираните данни
+  const submitEditForm = async (e) => {
+    e.preventDefault();
+    try {
+      console.log(`Изпращане на заявка за редактиране на заявка с ID: ${editingApplicationId}`);
+      
+      // Проверка дали ID на заявката е валидно
+      if (!editingApplicationId) {
+        console.error('Липсва ID на заявката за редактиране');
+        alert('Грешка: Не може да се идентифицира заявката за редактиране');
+        return;
+      }
+      
+      // Форматиране на данните за изпращане към API
+      const formattedData = {
+        start_date: editFormData.startDate,
+        end_date: editFormData.endDate,
+        message: editFormData.message
+      };
+      
+      console.log('Данни за изпращане:', formattedData);
+      
+      // Използваме правилния API маршрут за редактиране на заявка за наем
+      const response = await axios.put(
+        `${API_URL}/equipment-rentals/${editingApplicationId}`,
+        formattedData,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        }
+      );
+      
+      console.log('Отговор от сървъра след редактиране:', response.data);
+      
+      if (response.data.success) {
+        alert('Заявката е успешно редактирана');
+        closeEditForm();
+        
+        // Обновяваме локално заявката в списъка, вместо да зареждаме отново всички
+        if (response.data.data) {
+          setMyApplications(prevApplications => 
+            prevApplications.map(app => 
+              app.id === editingApplicationId ? response.data.data : app
+            )
+          );
+        }
+      } else {
+        alert(`Грешка при редактиране на заявката: ${response.data.error}`);
+      }
+    } catch (error) {
+      console.error('Грешка при редактиране на заявката:', error);
+      console.error('Детайли за грешката:', error.response?.data);
+      alert(`Грешка при редактиране: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
+  // Функция за намиране на оборудване по заявка
+  const findEquipmentByRequest = (request) => {
+    // Връща ID-то на оборудването от заявката, ако съществува
+    return request.equipmentId || 
+           (request.equipment && request.equipment.id) || 
+           null;
+  };
+
+  // Напълно преработена функция за извличане на информация за оборудване
+  const getEquipmentInfo = (application) => {
+    // Валидация на входните данни с подробно логване
+    console.log('Входна заявка:', application);
+    
+    if (!application) {
+      console.warn('Липсва заявка');
+      return null;
+    }
+    
+    // Извличаме ID-то на оборудването от заявката
+    let equipmentId = null;
+    
+    // Проверяваме различни места, където може да се съхранява ID-то
+    if (application.equipmentId) {
+      equipmentId = application.equipmentId;
+    } else if (application.equipment && application.equipment.id) {
+      equipmentId = application.equipment.id;
+    }
+    
+    console.log('Намерено ID на оборудване:', equipmentId);
+    return equipmentId;
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-900 to-gray-800">
       <div className="flex-grow">
@@ -1066,7 +1668,7 @@ const EquipmentPage = () => {
             Предложи
           </button>
           <button
-            onClick={() => setShowMyListings(true)}
+            onClick={handleViewMyListings}
             className="px-6 py-2 text-gray-400 hover:text-white transition-colors"
           >
             Виж моите обяви
@@ -1099,7 +1701,11 @@ const EquipmentPage = () => {
                     <p>Контакт: {equipment.contact}</p>
                   </div>
                   <button 
-                    onClick={() => setSelectedEquipment(equipment)}
+                    onClick={() => {
+                      console.log('Повече информация за:', equipment);
+                      setSelectedEquipment(equipment);
+                      setShowInfoModal(true);
+                    }}
                     className="mt-4 w-full px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
                   >
                     Повече информация
@@ -1115,7 +1721,16 @@ const EquipmentPage = () => {
       {showMyListings && (
         <MyListingsModal 
           onClose={() => setShowMyListings(false)}
-          onEdit={handleEditEquipment}
+          myEquipment={myEquipment}
+          isLoading={isLoadingMyEquipment}
+          error={myEquipmentError}
+          onRetry={fetchMyEquipment}
+          onApprove={(equipmentId, applicationId) => 
+            handleRentalApplication(equipmentId, applicationId, 'approve')
+          }
+          onReject={(equipmentId, applicationId) => 
+            handleRentalApplication(equipmentId, applicationId, 'reject')
+          }
         />
       )}
 
@@ -1157,8 +1772,82 @@ const EquipmentPage = () => {
         />
       )}
 
-      {showRentRequestForm && (
-        renderRentRequestModal()
+      {showInfoModal && renderInfoModal()}
+
+      {/* Добавяме модал за редактиране на заявка */}
+      {editingApplicationId && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-800 rounded-lg max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-semibold text-white">Редактиране на заявка</h3>
+              <button 
+                onClick={closeEditForm} 
+                className="p-1 hover:bg-gray-700 rounded-full transition-colors"
+              >
+                <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <form onSubmit={submitEditForm}>
+              <div className="mb-4">
+                <label className="block text-gray-300 text-sm font-medium mb-2">
+                  Начална дата
+                </label>
+                <input
+                  type="date"
+                  name="startDate"
+                  value={editFormData.startDate}
+                  onChange={handleEditFormChange}
+                  className="w-full bg-gray-700 border border-gray-600 rounded py-2 px-3 text-white"
+                />
+              </div>
+              
+              <div className="mb-4">
+                <label className="block text-gray-300 text-sm font-medium mb-2">
+                  Крайна дата
+                </label>
+                <input
+                  type="date"
+                  name="endDate"
+                  value={editFormData.endDate}
+                  onChange={handleEditFormChange}
+                  className="w-full bg-gray-700 border border-gray-600 rounded py-2 px-3 text-white"
+                />
+              </div>
+              
+              <div className="mb-6">
+                <label className="block text-gray-300 text-sm font-medium mb-2">
+                  Съобщение
+                </label>
+                <textarea
+                  name="message"
+                  value={editFormData.message}
+                  onChange={handleEditFormChange}
+                  rows={3}
+                  className="w-full bg-gray-700 border border-gray-600 rounded py-2 px-3 text-white"
+                />
+              </div>
+              
+              <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={closeEditForm}
+                  className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors"
+                >
+                  Отказ
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 transition-colors"
+                >
+                  Запази промените
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

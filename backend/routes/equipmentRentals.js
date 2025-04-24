@@ -7,7 +7,8 @@ const {
   getReceivedRentals,
   getRentalById,
   updateRentalStatus,
-  deleteRental
+  deleteRental,
+  updateRental
 } = require('../controllers/equipmentRentalController');
 
 // Основни маршрути
@@ -23,6 +24,7 @@ router.get('/received', protect, getReceivedRentals);
 // Маршрути за конкретна заявка
 router.route('/:id')
   .get(protect, getRentalById)
+  .put(protect, updateRental)
   .delete(protect, deleteRental);
 
 // Обновяване на статуса
